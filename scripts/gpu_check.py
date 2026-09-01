@@ -41,6 +41,14 @@ so peak is single-model. Don't add them.
 Multi-GPU: all queries and the allocation probe target ONE device — the first
 entry of ``CUDA_VISIBLE_DEVICES`` if set, else device 0 — matching what the
 CUDA-using stages will actually grab.
+
+Small cards (2026-09-01): a GPU whose TOTAL memory is below ``--min-free-mb``
+can never pass this gate, and "blocked — wait for other tasks" is the wrong
+answer for it: nothing is going to free up. That card is treated like no card
+at all — verdict ``gpu_too_small``, exit 0 — and the stage runs its CPU path
+(transcribe_video.py drops to CPU int8 on its own; ``--device cpu`` says so up
+front). A 2 GB laptop GPU hit this and read the old message as "my machine is
+broken". ``--require-gpu`` restores the hard block for batch hosts.
 """
 from __future__ import annotations
 
@@ -333,6 +341,10 @@ def main() -> None:
     ap.add_argument('--quiet', action='store_true')
     ap.add_argument('--json', action='store_true',
                     help='Print the full info dict as JSON to stdout')
+    ap.add_argument('--require-gpu', action='store_true',
+                    help='Exit 2 (blocked) when the GPU is too small for '
+                         '--min-free-mb, instead of the default exit 0 + '
+                         '"use the CPU path" advice')
     args = ap.parse_args()
 
     # Validation via ap.error, not assert: `python -O` strips asserts, and
@@ -374,6 +386,28 @@ def main() -> None:
                                exit_code=0)
                 log.close()
             sys.exit(0)
+        if i == 0 and info['total_mb'] < args.min_free_mb:
+            # Not contention — the card is simply too small for the model, and
+            # no amount of waiting changes total_mb. Say so, and let the CPU
+            # path run (unless a batch host insists on a real GPU).
+            code = 2 if args.require_gpu else 0
+            print(f"GPU_CHECK: {'BLOCKED' if code else 'GPU_TOO_SMALL'} | "
+                  f"gpu={gpu_index} has {info['total_mb']}MB total, this stage "
+                  f"wants {args.min_free_mb}MB free.", file=sys.stderr)
+            print("  This is not 'GPU busy' — the card cannot hold the model. "
+                  "Options:\n"
+                  "    - let transcription run on CPU (automatic; 10-20x slower; "
+                  "pass --device cpu to skip the CUDA attempt)\n"
+                  "    - use a smaller model on CPU: --model small (or medium)\n"
+                  "    - offload to hosted Whisper: --engine groq "
+                  "(non-confidential audio only)", file=sys.stderr)
+            if log:
+                log.stage_done(success=(code == 0),
+                               verdict='gpu_too_small', exit_code=code,
+                               total_mb=info['total_mb'],
+                               min_free_mb=args.min_free_mb)
+                log.close()
+            sys.exit(code)
         classification = classify(info, args.min_free_mb, args.util_threshold)
         snap = {**info, **classification, 'poll': i + 1}
         snapshots.append(snap)

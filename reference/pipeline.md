@@ -51,7 +51,14 @@ the capture-time alignment whenever two or more independent sources are present.
 
 `gpu_check.py [--out-dir DIR] [--min-free-mb 5000] [--util-threshold 40]
 [--polls 3] [--poll-interval 2.0] [--alloc-fraction 0.8] [--alloc-cap-mb 0]
-[--skip-alloc-test] [--quiet] [--json]`
+[--skip-alloc-test] [--quiet] [--json] [--require-gpu]`
+
+**Too-small card first.** If the GPU's *total* memory is below `--min-free-mb`
+the gate cannot ever pass and waiting is pointless, so it prints
+`GPU_TOO_SMALL` with the three options (CPU path / `--model small` /
+`--engine groq`) and exits `0` — same as "no nvidia-smi". `--require-gpu`
+turns that into exit `2` for batch hosts that must not silently run on CPU.
+Verdict `gpu_too_small` lands in `progress_gpu_check.jsonl`.
 
 Blocks (exit 2) when any of these holds across ==all== polls:
 
@@ -77,6 +84,7 @@ but is idle — proceed and log), `2` blocked. Emits
 | `--output-dir` / `-o` | the media file's own directory | |
 | `--model` | `breeze25` | alias from `config.yaml models.aliases`, or any path / HF hub name |
 | `--compute-type` | `float16` | |
+| `--device` | `auto` | `auto` tries CUDA and drops to CPU int8 when CUDA is missing **or the model does not fit the card** (load-time OOM); `cpu` skips the CUDA attempt (2–4 GB cards: pair with `--model small`/`medium`, `large-v3` on CPU is hours per hour of audio); `cuda` never falls back. The CPU choice is exported as `LECTURE_ASR_DEVICE=cpu` so the collapse-retry child does not OOM again. |
 | `--beam-size` | `5` | 10 for accented / domain-heavy speech (~30 % slower) |
 | `--batched` / `--no-batched` | batched ON | ==but batching only engages when `--vad` is also passed==, because `BatchedInferencePipeline` requires `vad_filter=True` and VAD has been off by default since 2026-07-12. With default flags this runs SEQUENTIAL. |
 | `--batch-size` | `4` | safe on 8 GB with beam 10; on CUDA OOM it retries once at half, then falls back to sequential |

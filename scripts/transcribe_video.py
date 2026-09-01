@@ -58,6 +58,7 @@ Tips for accented English / domain-heavy lectures
 from __future__ import annotations
 
 import argparse
+import atexit
 import gc
 import os
 import re
@@ -65,9 +66,9 @@ import subprocess
 import sys
 import time
 
-from _common import (atomic_write_json, fmt_hms, load_config, require_binaries,
-                     resolve_model, resolve_pause_flag, setup_nvidia_path,
-                     wait_if_paused, write_transcript_lines)
+from _common import (atomic_write_json, fmt_hms, gpu_lease_ctx, load_config,
+                     require_binaries, resolve_model, resolve_pause_flag,
+                     setup_nvidia_path, wait_if_paused, write_transcript_lines)
 
 try:
     from _log import StageLogger, append_run_summary, git_hash, lecture_name
@@ -382,6 +383,11 @@ def main() -> int:
                              "簡體 drift. No local model dir? use --model large-v3.")
     parser.add_argument("--compute-type", default="float16",
                         help="CTranslate2 compute type (default float16; try int8_float16 for low VRAM)")
+    parser.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto",
+                        help="auto (default) = try CUDA, fall back to CPU int8 when "
+                             "CUDA is missing or the card is too small; cpu = skip the "
+                             "CUDA attempt (2-4 GB cards: pair with --model small/medium); "
+                             "cuda = never fall back, fail loudly.")
     parser.add_argument("--engine", choices=["local", "groq"], default="local",
                         help="local = faster-whisper on GPU (default). groq = cloud "
                              "Whisper (frees the GPU); auto-falls-back to local on "
@@ -562,56 +568,81 @@ def main() -> int:
         log.close()
         return 1
 
-    # ---- Cooperative GPU pause button ----
-    # Yield the GPU while someone holds the pause flag (configured via
-    # paths.pause_flag / LECTURE_PAUSE_FLAG; disabled when unset). Any GPU job
-    # honors this so two CUDA jobs never collide. The holder of the pause runs
-    # its own job with GPU_LEASE_BYPASS=1 so it doesn't wait on itself. The wait
-    # is bounded inside wait_if_paused — a stale flag can't wedge the pipeline.
-    # Best-effort: a config problem must never take down transcription.
+    # ---- Machine-wide GPU lease (2026-08-10, replaces the pause-flag wait) ----
+    # The old wait_if_paused here was best-effort AND bounded: after 3600 s it
+    # printed "treating as stale and continuing" and ran the GPU anyway — while
+    # a legitimate holder (e.g. the LanceDB indexer, acquire timeout 6 h) still
+    # had the card. Now we take a real FIFO lease for the rest of the process:
+    # timeout = ABORT (never run unleased), release via atexit on every exit
+    # path, hard crashes self-heal through the lease's reap_on_pid_death. Under
+    # a lease-holding parent (GPU_LEASE_BYPASS=1) the acquire short-circuits,
+    # and on boxes without the lease script it is a no-op.
+    _lease_cm = gpu_lease_ctx("transcribe_video", min_free_mb=4000, timeout=7200)
     try:
-        wait_if_paused(
-            resolve_pause_flag(cfg),
-            log_fn=lambda msg: log.emit("gpu_pause_wait", status="running", note=msg),
-        )
-    except Exception as e:  # noqa: BLE001
-        print(f"[transcribe] pause check skipped ({e})", file=sys.stderr)
+        _lease_cm.__enter__()
+    except RuntimeError as e:
+        print(f"[transcribe] GPU lease unavailable — aborting: {e}", file=sys.stderr)
+        log.stage_done(success=False, error=f"gpu_lease acquire failed: {e}")
+        log.close()
+        return 1
+    atexit.register(lambda: _lease_cm.__exit__(None, None, None))
 
     # ---- Model setup ----
     setup_nvidia_path()
 
+    def _cpu_eta() -> str:
+        if not duration_s:
+            return ""
+        return (f" This {fmt_hms(duration_s)} recording will take roughly "
+                f"{fmt_hms(duration_s * 1.5)}-{fmt_hms(duration_s * 3)} on CPU.")
+
+    def _cpu_model():
+        from faster_whisper import WhisperModel
+        # The collapse-retry child (retranscribe_segment.py) loads its own
+        # model; tell it not to re-attempt CUDA and OOM/fall back all over again.
+        os.environ["LECTURE_ASR_DEVICE"] = "cpu"
+        return WhisperModel(model_ref, device="cpu", compute_type="int8")
+
     def model_factory():
         from faster_whisper import WhisperModel
+        if args.device == "cpu":
+            print(f"[transcribe] --device cpu: loading {model_ref!r} as CPU int8."
+                  f"{_cpu_eta()}", file=sys.stderr)
+            log.emit("device", status="running", device="cpu", compute_type="int8",
+                     reason="--device cpu")
+            return _cpu_model()
         try:
             return WhisperModel(model_ref, device="cuda",
                                 compute_type=args.compute_type)
         except Exception as gpu_err:  # noqa: BLE001
-            # Only a missing/broken CUDA runtime justifies the CPU path. A bad
-            # model path or an unsupported compute type is a fixable mistake,
-            # and silently answering it with a 10-20x slower run (one JSONL line
-            # as the only evidence) has cost whole nights.
+            # Only a missing/broken CUDA runtime — or a card too small to hold
+            # the model — justifies the CPU path. A bad model path or an
+            # unsupported compute type is a fixable mistake, and silently
+            # answering it with a 10-20x slower run (one JSONL line as the only
+            # evidence) has cost whole nights.
             msg = str(gpu_err).lower()
+            gpu_oom = _is_oom(gpu_err)
             cuda_missing = any(k in msg for k in (
                 "cuda", "cudnn", "cublas", "no gpu", "libcuda", "nvidia", "driver"))
-            if not cuda_missing:
+            if args.device == "cuda" or not (cuda_missing or gpu_oom):
                 print(f"ERROR: model load failed for {model_ref!r} with "
                       f"compute_type={args.compute_type!r}: {gpu_err}",
                       file=sys.stderr)
                 raise
-            eta = ""
-            if duration_s:
-                eta = (f" This {fmt_hms(duration_s)} recording will take roughly "
-                       f"{fmt_hms(duration_s * 1.5)}-{fmt_hms(duration_s * 3)} on CPU.")
+            why = ("GPU out of memory loading the model — the card is too small "
+                   "for it (2-4 GB cards: try --model small or --engine groq)"
+                   if gpu_oom else "CUDA unavailable")
             print("=" * 72, file=sys.stderr)
-            print(f"WARNING: CUDA unavailable ({str(gpu_err)[:200]})", file=sys.stderr)
-            print(f"WARNING: falling back to CPU int8 — 10-20x SLOWER.{eta}",
+            print(f"WARNING: {why} ({str(gpu_err)[:200]})", file=sys.stderr)
+            print(f"WARNING: falling back to CPU int8 — 10-20x SLOWER.{_cpu_eta()}",
                   file=sys.stderr)
             print("WARNING: Ctrl-C now and fix CUDA if that is not acceptable.",
                   file=sys.stderr)
             print("=" * 72, file=sys.stderr)
-            log.retry(reason="CUDA unavailable → CPU int8",
+            log.retry(reason=("GPU too small → CPU int8" if gpu_oom
+                              else "CUDA unavailable → CPU int8"),
                       error=str(gpu_err)[:200])
-            return WhisperModel(model_ref, device="cpu", compute_type="int8")
+            return _cpu_model()
 
     decode_params, language = build_decode_params(args)
     if args.word_timestamps:

@@ -3,6 +3,46 @@
 All notable changes to this project are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] — 2026-09-01
+
+### Fixed
+
+- **A GPU that is too small no longer reads as "GPU busy".** A user with a 2 GB
+  laptop card reported the pipeline "stuck": `gpu_check.py` compared *free* VRAM
+  against `--min-free-mb 6000`, said `blocked — wait for other tasks`, and the
+  skill instructions say not to retry. Nothing was going to free up — the card
+  cannot hold a `large-v3`-class model at all. The pre-flight now checks *total*
+  VRAM first and, when the card can never pass, prints `GPU_TOO_SMALL` with the
+  three real options (CPU path, `--model small`, `--engine groq`) and exits `0`,
+  the same verdict as "no NVIDIA card". `--require-gpu` keeps the hard block for
+  batch hosts that must not silently run on CPU.
+- **Load-time CUDA OOM falls back to CPU explicitly.** The fallback used to fire
+  only because the OOM text happened to contain the word `cuda`; it is now a
+  recognised case with its own message ("the card is too small for this model")
+  and log reason, in both `transcribe_video.py` and the collapse-retry child.
+- **The collapse-retry child no longer re-attempts CUDA after the parent already
+  fell back.** `transcribe_video.py` exports `LECTURE_ASR_DEVICE=cpu` once it is
+  on CPU; `retranscribe_segment.py` honours it instead of OOM-ing a second time.
+
+### Added
+
+- `transcribe_video.py --device {auto,cuda,cpu}`. `auto` (default) is the
+  existing behaviour; `cpu` skips the CUDA attempt and prints the ETA up front
+  (pair with `--model small`/`medium` on 2–4 GB machines); `cuda` never falls
+  back and fails loudly.
+- README (both languages): a small GPU (2–4 GB) counts as no GPU — which flags to
+  use and which optional stages to skip.
+
+### Changed (synced from upstream, no user-facing behaviour on other machines)
+
+- GPU stages take a machine-wide FIFO lease when the author's `gpu_lease.py` is
+  present next to the skill; on any other machine `gpu_lease_ctx()` is a
+  no-op. Replaces the older best-effort pause-flag wait in `transcribe_video.py`,
+  `vlm_signals.py`, `retranscribe_segment.py`, `ocr_surya.py`.
+- `batch/build_L1.py`: a deck-only (unrecorded) slide keeps up to 24 text lines
+  in L1 instead of the 6 a video frame gets — the deck text is the only content
+  there.
+
 ## [0.7.0] — 2026-08-07
 
 ### Changed

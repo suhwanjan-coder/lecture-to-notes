@@ -49,7 +49,7 @@ import sys
 import tempfile
 import time
 
-from _common import (atomic_write_json, load_config, resolve_model,
+from _common import (atomic_write_json, gpu_lease_ctx, load_config, resolve_model,
                      setup_nvidia_path, write_transcript_lines)
 
 try:
@@ -279,11 +279,19 @@ def load_model(model_ref):
     repair into an overnight one, with a single JSONL line as the only clue).
     """
     from faster_whisper import WhisperModel
+    if os.environ.get("LECTURE_ASR_DEVICE", "").lower() == "cpu":
+        # Set by transcribe_video.py once it has already fallen back (or was
+        # told --device cpu): do not re-attempt CUDA and OOM a second time.
+        print("[retranscribe] LECTURE_ASR_DEVICE=cpu → CPU int8", file=sys.stderr)
+        return WhisperModel(model_ref, device="cpu", compute_type="int8")
     try:
         return WhisperModel(model_ref, device="cuda", compute_type="float16")
     except Exception as gpu_err:  # noqa: BLE001 — ct2 raises bare RuntimeError
         msg = str(gpu_err).lower()
-        cuda_missing = any(k in msg for k in (
+        gpu_oom = any(k in msg for k in (
+            "out of memory", "cudamalloc", "cudaerrormemoryallocation",
+            "cublas_status_alloc_failed"))
+        cuda_missing = gpu_oom or any(k in msg for k in (
             "cuda", "cudnn", "cublas", "no gpu", "libcuda", "nvidia", "driver"))
         if not cuda_missing:
             print(f"ERROR: could not load model {model_ref!r}: {gpu_err}",
@@ -314,29 +322,33 @@ def transcribe_chunk(audio_path, language, glossary, beam_size=15,
     just propagating it forward).
     """
     setup_nvidia_path()
-    model = load_model(model_ref or DEFAULT_MODEL_ALIAS)
-    try:
-        segments, info = model.transcribe(
-            audio_path,
-            language=language,
-            beam_size=beam_size,
-            vad_filter=True,
-            vad_parameters={"min_silence_duration_ms": 300},
-            initial_prompt=glossary,
-            condition_on_previous_text=False,
-            temperature=[0.0, 0.2, 0.4, 0.6, 0.8],
-            repetition_penalty=repetition_penalty,
-            no_repeat_ngram_size=no_repeat_ngram_size,
-        )
-        out = [{"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text}
-               for s in segments]
-    finally:
-        # Best effort: drop our reference so the next chunk's model does not
-        # meet this one on an 8GB card. CTranslate2 frees VRAM in the model's
-        # destructor, so this is as much control as Python gives us.
-        del model
-        import gc
-        gc.collect()
+    # Per-chunk GPU lease: short holds queue politely behind (and get yielded
+    # to by) long batches. No-op under a lease-holding parent (asr_resweep run
+    # through `gpu_lease run`) or on boxes without the lease script.
+    with gpu_lease_ctx("retranscribe_segment", min_free_mb=4000):
+        model = load_model(model_ref or DEFAULT_MODEL_ALIAS)
+        try:
+            segments, info = model.transcribe(
+                audio_path,
+                language=language,
+                beam_size=beam_size,
+                vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 300},
+                initial_prompt=glossary,
+                condition_on_previous_text=False,
+                temperature=[0.0, 0.2, 0.4, 0.6, 0.8],
+                repetition_penalty=repetition_penalty,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+            )
+            out = [{"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text}
+                   for s in segments]
+        finally:
+            # Best effort: drop our reference so the next chunk's model does not
+            # meet this one on an 8GB card. CTranslate2 frees VRAM in the model's
+            # destructor, so this is as much control as Python gives us.
+            del model
+            import gc
+            gc.collect()
     return out
 
 

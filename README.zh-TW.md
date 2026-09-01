@@ -105,6 +105,11 @@ OCR 兩階段（RapidOCR 快篩 → Surya 精讀）、本地 VLM 判讀投影片
 - **NVIDIA GPU（8GB 以上）是快速路徑，不是硬需求。**沒有的話：
   - **CPU fallback 內建**——轉錄自動降到 CPU int8，開跑前先誠實印出預估時間
     （一小時的課會從幾分鐘變成幾小時）。OCR 快篩階段本來就對 CPU 友善。
+  - **2–4 GB 的小顯卡等同沒有顯卡。**`large-v3` 級的模型要 ~4.5 GB；GPU 預檢會
+    回報 `GPU_TOO_SMALL` 然後放行走 CPU 路徑。要跑得動請換小模型——
+    `transcribe_video.py ... --device cpu --model small`（或 `medium`）——或改用
+    下面的 `--engine groq`。這種機器請跳過 Stage D（`minicpm-v:8b`）與 Surya OCR；
+    RapidOCR 本來就只用 CPU。
   - **轉錄外包給雲端 Whisper**——`scripts/groq_asr.py` 把壓縮後的音訊送
     Groq 的 `whisper-large-v3-turbo`（免費層可用；25 MB 上限自動分段），
     回傳格式與本機路徑完全相容。先讀它的 docstring：雲端版對中英混講的

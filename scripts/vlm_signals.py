@@ -595,14 +595,22 @@ def main():
               "0 disables retrying.", file=sys.stderr)
         sys.exit(2)
 
-    # Cooperative GPU pause button: yield while someone holds `gpu_lease pause`.
-    # Best-effort: a missing config (or missing pyyaml) must not block the stage.
-    # The wait is bounded inside wait_if_paused, so a stale flag cannot wedge us.
+    # ---- Machine-wide GPU lease (2026-08-10, replaces the pause-flag wait) ----
+    # The old best-effort wait_if_paused swallowed every exception and, after
+    # its bounded 3600 s, ran the VLM anyway while a legitimate holder still
+    # had the card. Real FIFO lease now: acquire timeout = ABORT, release via
+    # atexit on every exit path (hard crashes self-heal via reap_on_pid_death).
+    # No-op under a lease-holding parent (GPU_LEASE_BYPASS=1) and on boxes
+    # without the lease script.
+    import atexit
+    from _common import gpu_lease_ctx
+    _lease_cm = gpu_lease_ctx("vlm_signals", min_free_mb=5000, timeout=7200)
     try:
-        from _common import load_config, resolve_pause_flag, wait_if_paused
-        wait_if_paused(resolve_pause_flag(load_config()))
-    except Exception as e:  # noqa: BLE001
-        print(f"[vlm_signals] pause check skipped ({e})", file=sys.stderr)
+        _lease_cm.__enter__()
+    except RuntimeError as e:
+        print(f"[vlm_signals] GPU lease unavailable — aborting: {e}", file=sys.stderr)
+        sys.exit(1)
+    atexit.register(lambda: _lease_cm.__exit__(None, None, None))
 
     dedup_path = os.path.join(args.out_dir, "slides_dedup.json")
     slides_dir = os.path.join(args.out_dir, "slides")

@@ -114,7 +114,10 @@ One directory per lecture holds every intermediate; name it
 python <skill-dir>/scripts/gpu_check.py --out-dir "$OUT_DIR" --min-free-mb 6000
 ```
 Gate before transcription and again before Stage D. Exit `0` proceed, `1` warn
-and proceed, `2` blocked — surface it, ==do not retry in a loop==.
+and proceed, `2` blocked — surface it, ==do not retry in a loop==. A card whose
+*total* VRAM is under the threshold (2–4 GB laptops) is `GPU_TOO_SMALL`, exit
+`0`: not contention, nothing will free up — proceed with the CPU path
+(`transcribe_video.py --device cpu --model small`, or `--engine groq`).
 → `reference/pipeline.md#gpu-check`
 
 ### Step 4 — Transcribe

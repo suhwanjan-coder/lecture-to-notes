@@ -13,6 +13,9 @@ Output → <xlf_dir>/_L1/  (NOT the vault):
 """
 import json, os, sys, glob, shutil
 
+# text lines a deck slide keeps in L1 (a video frame keeps 6)
+DECK_TEXT_LINES = 24
+
 
 def ts(s):
     s = int(s or 0)
@@ -143,7 +146,17 @@ def build(xlf_dir, gran, fig_dir, fig_rel):
                 out.append(f"\n**📄 p.{p.get('slide_id', '?')} — {fn}**")
                 out.append(f"![{tag}]({fig_rel}/{tag})")
                 if text:
-                    out.append("> " + " / ".join(text.splitlines()[:6]))
+                    # 2026-08-25: a deck slide keeps up to DECK_TEXT_LINES lines,
+                    # not the 6 a video frame gets. For a recorded clip the
+                    # transcript carries the content and the frame OCR is a label;
+                    # on an unrecorded session the deck text IS the only content,
+                    # and the 6-line cut silently dropped it on 82 of the 317
+                    # slides of the first deck-only course.
+                    _ls = [x for x in text.splitlines() if x.strip()]
+                    out.append("> " + " / ".join(_ls[:DECK_TEXT_LINES]))
+                    if len(_ls) > DECK_TEXT_LINES:
+                        out.append(f"> …（本頁尚有 {len(_ls) - DECK_TEXT_LINES} 行文字，"
+                                   f"完整內容見 `_decks/{deck_name}/pdf_text.json`）")
                 out.append("")
 
     return "\n".join(out), len(copied)

@@ -235,6 +235,30 @@ def resolve_pause_flag(cfg: dict | None = None) -> str | None:
     return cfg_val or None
 
 
+def gpu_lease_ctx(name: str, min_free_mb: int = 6000, timeout: float = 2400):
+    """Machine-wide GPU lease as a context manager (FIFO-queued since 2026-08-10).
+
+    Leaf scripts that actually run CUDA/ollama wrap their GPU phase in this, so
+    the whole tree is lease-compliant no matter which orchestrator invoked it:
+
+    * under a lease-holding parent (``gpu_lease run`` sets GPU_LEASE_BYPASS=1)
+      the inner acquire short-circuits — no self-deadlock;
+    * standalone, it queues like everyone else and RAISES on acquire timeout —
+      never run the GPU without the lease;
+    * where ``~/.claude/scripts/gpu_lease.py`` does not exist (open-source
+      copies of this pipeline on other machines) it is a silent no-op.
+    """
+    import contextlib
+    lease_dir = os.path.expanduser("~/.claude/scripts")
+    if lease_dir not in sys.path:
+        sys.path.insert(0, lease_dir)
+    try:
+        from gpu_lease import lease
+    except ImportError:
+        return contextlib.nullcontext()
+    return lease(name, min_free_mb=min_free_mb, timeout=timeout)
+
+
 def wait_if_paused(flag_path: str | None,
                    log_fn: Callable[[str], None] | None = None,
                    max_wait_s: int = 3600,

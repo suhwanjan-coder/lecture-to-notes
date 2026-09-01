@@ -43,7 +43,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 from _common import (atomic_write_json,  # noqa: E402
-                     load_config, rapidocr_text_ex)
+                     gpu_lease_ctx, load_config, rapidocr_text_ex)
 
 # Production adapter (moved out of ocr_bench/ on 2026-08-02 — production must not
 # depend on the benchmark tree).
@@ -256,8 +256,11 @@ def main():
     # Surya pass (single subprocess call, image list via manifest file)
     timeout_s = args.timeout or (TIMEOUT_BASE_S + TIMEOUT_PER_IMAGE_S * len(surya_targets))
     if surya_python:
-        results, surya_error = run_surya(surya_python,
-                                         [p for _, p in surya_targets], timeout_s)
+        # Surya runs CUDA in the subprocess — take the machine-wide GPU lease
+        # around the one call (no-op under a lease-holding parent / other boxes).
+        with gpu_lease_ctx("ocr_surya"):
+            results, surya_error = run_surya(surya_python,
+                                             [p for _, p in surya_targets], timeout_s)
     else:
         results, surya_error = {}, "surya_unavailable"
 

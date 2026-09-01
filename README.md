@@ -166,6 +166,12 @@ Honest version:
   - **CPU fallback is built in** — transcription drops to int8 on CPU
     automatically and prints an honest ETA first (a 60-minute lecture takes
     hours instead of minutes). The OCR triage stage is CPU-friendly already.
+  - **A small GPU (2–4 GB) counts as no GPU.** `large-v3`-class models need
+    ~4.5 GB; the pre-flight reports `GPU_TOO_SMALL` and lets the CPU path run.
+    Make it bearable with a smaller model —
+    `transcribe_video.py ... --device cpu --model small` (or `medium`) — or
+    offload with `--engine groq` below. Skip Stage D (`minicpm-v:8b`) and
+    Surya OCR on such a machine; RapidOCR is CPU-only anyway.
   - **Offload transcription to a hosted Whisper** — `scripts/groq_asr.py`
     sends compressed audio to Groq's `whisper-large-v3-turbo` (free tier
     works; the 25 MB request cap is handled by chunking) and returns the same
