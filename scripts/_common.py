@@ -112,7 +112,11 @@ def setup_nvidia_path() -> None:
     if sys.platform == "win32":
         import importlib.util
         for pkg in ("nvidia.cublas", "nvidia.cudnn"):
-            spec = importlib.util.find_spec(pkg)
+            try:
+                spec = importlib.util.find_spec(pkg)
+            except ModuleNotFoundError:
+                # parent package `nvidia` absent (CPU-only install): nothing to add
+                continue
             if spec and spec.submodule_search_locations:
                 for loc in spec.submodule_search_locations:
                     bin_dir = os.path.join(loc, "bin")
