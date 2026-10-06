@@ -77,3 +77,10 @@ python scripts\transcribe_video.py "<影片或音檔>" --output-dir "$O" --lang 
 - 若是「影片 + 音檔」或兩段影片，route_inputs 會提示先跑 course_timeline / media_capture_index 對時。
 - 跑完 Stage E 會有 `slides_grounded.json`；有 agent 才會寫出最後筆記與 HTML viewer。
 - 卡住就把 `_out\*.log` 與 route_inputs 的輸出貼回來。
+
+## 4. 本機實跑補記（2026-10-06，ACHIH-MAIN）
+
+- 已裝：Python 3.12（winget）、`.venv`（py -3.12）、ffmpeg 9.0、pandoc、ollama 都在 PATH；無 NVIDIA GPU（gpu_check 回 CPU mode）。
+- `route_inputs.py` 對素材資料夾跑通，但它把兩支 mp4 當成「同一場演講的兩個錄影來源」要求對時（media_capture_index / xcorr）。實際上是兩位講者各自的演講，請分成兩個資料夾各跑一次，略過對時步驟。
+- 建議本機工作目錄：`D:\lectures\IDSA_20261004\胡婉妍\`、`D:\lectures\IDSA_20261004\黃立民\`（G: 串流磁碟讀 2 GB 影片很慢）。
+- pip 從 files.pythonhosted.org 下載很慢（14.9 MB 的 rapidocr 花了十幾分鐘），裝依賴請預留時間。
