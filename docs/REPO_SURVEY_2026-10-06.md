@@ -121,4 +121,28 @@
 3. htlin222 網頁：curate-course、lin-hsiehting、scenemd、img-hosting。
 4. htlin222 影音/筆記：sum-the-yt、polish-screen-record、wiki-thread。
 
+## 五、與 suhwanjan-coder 既有 repo 對照（2026-10-06）
+
+### drpwchen
+| Repo | 狀態 |
+|---|---|
+| lecture-to-notes、claude-pacer | 已 fork |
+| textbook-to-note、paper-radar、paper-fetch、paper-review-and-digest、vault-search、note-supplement、openevidence-tools、ytscribe、asr-benchmark、exam-practice、chart-scrub、evernote-rescue、codex-pacer | 未 fork，`docs/fork_drpwchen.sh` 一次補齊 |
+
+注意：既有的 `textbook-notes` 不是 drpwchen 的 `textbook-to-note`，是另一個來源。
+
+### htlin222 已 fork（11 個）
+zh-ebn-report-skill、robust-lit-review、sum-the-yt、linebot-turso-relay、learn-r-with-ai、CCChange、pdf-to-tts-zh-skill、lumiterm、oe-extension、LizardType，以及 agent-skills / skills（htlin222 也是 fork，原始來源另有其人）。
+
+### htlin222 尚未 fork、建議補的
+| 類別 | Repo |
+|---|---|
+| 研究 | meta-pipe、openevidence-mcp、audit-oe-skill、ask-oe-with-ego-skill、irb-in-hurry、cps-skills、research-guardian-skill、flowdoc、academic-manuscript-workflow、submission-desk |
+| 筆記 | wiki-thread、polish-screen-record、hackmd-skill、mcq-bank、yanki-mcp-server、zh-article-analyzer-skill、quartz |
+| 網頁/簡報 | curate-course、lin-hsiehting、scenemd、lizard-gslide-module、img-hosting、minimalism-slides、pdf-presenter、bestseller、open-google-slide、live-google-slide |
+| 開發 | mini-claw、csession、gh-repo-father-skill、claude-with-webhook |
+
+## 六、本機 vs 雲端
+這些工具絕大多數要在自己電腦上跑：lecture-to-notes、textbook-to-note、asr-benchmark 需要 GPU 或大量 CPU 時間與 ffmpeg；vault-search、note-supplement、wiki-thread 要讀本機 Obsidian vault；paper-fetch 要用你的機構 proxy 登入；sum-the-yt、polish-screen-record 依賴本機 claude CLI 或 Colab。純雲端可用的只有 paper-radar（Cloudflare + 24/7 主機）、curate-course / lin-hsiehting / scenemd（Cloudflare Pages）、openevidence-mcp 這類 server 型工具。Claude Code skill 類（paper-review-and-digest、cps-skills 等）只要放進 `~/.claude/skills/` 就能用，本機或 Claude Code web 皆可。
+
 未能查到：drpwchen.com 與 lin.hsiehting.com 被本環境網路政策擋住，作者的 map/portfolio 頁沒讀到，以上以 GitHub 頁面為準。
