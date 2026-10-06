@@ -2,6 +2,16 @@
 
 目標：用 `G:\我的雲端硬碟\IDSA 流感疫苗接種指引更新發布 20261004` 裡的兩個檔案，驗證 lecture-to-notes 在這台 Windows 機器上能跑完。
 
+## 本機狀況（2026-10-06 確認）
+
+- 沒有 NVIDIA GPU → 轉錄走 `--engine groq`（公開內容，可離機）或 `--device cpu --model small`。
+- 跳過 ollama / minicpm-v（Stage D）與 Surya OCR；RapidOCR 本來就是 CPU。
+- Google Drive 串流磁碟（G:）讀寫慢，先把素材複製到本機如 `D:\lectures\IDSA_20261004`。
+
+找 repo 資料夾：`$p = Join-Path $HOME "lecture-to-notes"; Write-Host $p; explorer $p`
+
+Groq key：console.groq.com 免費申請 → `setx GROQ_API_KEY "gsk_..."` → 重開 PowerShell 與 Claude Code。
+
 ## 0. 一次性安裝（PowerShell）
 
 ```powershell
