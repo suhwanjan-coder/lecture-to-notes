@@ -534,8 +534,16 @@ dead link. Tier parsing accepts the malformed forms that used to silently demote
 a slide to tier 3 (and thus delete its figure) — `"T1 核心"`, floats, `None`.
 
 `finalize_to_vault.py <lecture_dir> [--note-name NAME] [--speaker NAME]
-[--topic TOPIC] [--date YYYYMMDD] [--vault-root PATH] [--force]
+[--topic TOPIC] [--date YYYYMMDD] [--vault-root PATH] [--inbox-dir NAME]
+[--attach-dir-name NAME] [--note FILE] [--slug SLUG] [--force]
 [--allow-no-refs] [--dry-run]`
+
+Folder names default to `00Inbox` / `99Attachment` (==the private convention==);
+a vault laid out differently sets `paths.vault_inbox_dir` /
+`paths.vault_attach_dir` / `paths.vault_attach_pattern` in `config.yaml` once,
+so `render_embeds.py` and this script agree. `--note` picks a note other than
+`note_draft.md`; `--slug` overrides the attachment slug when the lecture dir
+name is not descriptive (e.g. `_out`).
 
 Copies cited slides (tier ∈ {1,2}, not suppressed) from
 `<lecture_dir>/slides/<filename>` to the attachment folder as

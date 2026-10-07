@@ -16,6 +16,12 @@ paths:
   # Empty/missing => aliases containing {whisper_model_dir} are unusable and the
   # HF hub names (e.g. large-v3) are the way to go.
   whisper_model_dir: ''  # e.g. /models/whisper — empty => use HF hub names like large-v3
+  # Vault layout (render_embeds.py + finalize_to_vault.py). Empty => the
+  # pipeline's private convention: 99Attachment/lecture_{slug} and 00Inbox.
+  vault_root: ''  # Obsidian vault root for finalize (env CLAUDE_VAULT_ROOT also works)
+  vault_attach_pattern: ''  # e.g. 99-Attachment/lecture_{slug}
+  vault_attach_dir: ''      # attachment folder under the vault root, e.g. 99-Attachment
+  vault_inbox_dir: ''       # inbox folder under the vault root, e.g. 00-Inbox
 
 models:
   # Alias -> model path or Hugging Face hub name, consumed by _common.resolve_model.
@@ -111,6 +117,13 @@ scoring:
       - [title, decorative]
 
 keyword_grounding:
+  # CJK keyword grounding (ground_slides.py): a run of >=4 Han chars on a slide counts as
+  # spoken when this fraction of its character bigrams occurs in the transcript window
+  # (coverage test; both sides normalized to Traditional). 2-3 char runs must match exactly.
+  cjk_bigram_hit_ratio: 0.4
+  # Keywords on more than this fraction of the deck's canonical slides (footers, sponsor
+  # names, banners) are dropped before scoring. Skipped for decks of <5 slides.
+  boilerplate_slide_ratio: 0.4
   # Short abbreviations (≤4 chars + ALL_CAPS) use exact + word-boundary match only.
   # Add medical abbreviations frequently seen in PMR / board-exam topics here.
   abbreviation_whitelist:

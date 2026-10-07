@@ -2,9 +2,9 @@
 
 1. Read slides_final.json (Stage F output: tier + attachment_name per slide).
 2. Copy ONLY cited slides (tier in {1,2}, not embed_suppressed) from
-   <lecture_dir>/slides/<filename> -> 99Attachment/lecture_<slug>/<attachment_name>.
-3. Copy note_draft.md -> 00Inbox/<note_name>.
-4. Audit: every ![[99Attachment/lecture_<slug>/...]] reference in the note must
+   <lecture_dir>/slides/<filename> -> <attach dir>/lecture_<slug>/<attachment_name>.
+3. Copy note_draft.md (or --note) -> <inbox dir>/<note_name>.
+4. Audit: every ![[<attach dir>/lecture_<slug>/...]] reference in the note must
    now resolve to a copied file; warn on any that don't (folds in the old
    _audit_and_fix_attachments check).
 
@@ -13,13 +13,17 @@ overridable via flags for non-standard names.
 
 This is the one vault-coupled stage: it needs somewhere to put attachments and
 notes. The vault root comes from _paths (CLAUDE_VAULT_ROOT env var) and can be
-overridden per-run with --vault-root.
+overridden per-run with --vault-root. The inbox and attachment folder names
+default to this pipeline's private convention (00Inbox / 99Attachment); a vault
+with other names sets `paths.vault_inbox_dir` / `paths.vault_attach_dir` in
+config.yaml or passes --inbox-dir / --attach-dir-name.
 
 Usage:
     python finalize_to_vault.py <lecture_dir> \
         [--note-name 20250914_speaker_topic.md] \
         [--speaker NAME] [--topic TOPIC] [--date 20250914] \
-        [--vault-root PATH] [--force] [--allow-no-refs] [--dry-run]
+        [--vault-root PATH] [--inbox-dir NAME] [--attach-dir-name NAME]
+        [--note note_draft.md] [--slug SLUG] [--force] [--allow-no-refs] [--dry-run]
 """
 import argparse, json, re, shutil, sys
 from pathlib import Path
@@ -30,10 +34,27 @@ except Exception:
     pass
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import parse_tier
+from _common import load_config, parse_tier
 from _paths import VAULT_ROOT as DEFAULT_VAULT
 
-REF_RE = re.compile(r"!\[\[99Attachment/lecture_[^/]+/([^|\]]+)")
+DEFAULT_INBOX_DIR = "00Inbox"
+DEFAULT_ATTACH_DIR = "99Attachment"
+
+
+def ref_re(attach_dir_name):
+    return re.compile(r"!\[\[" + re.escape(attach_dir_name) + r"/lecture_[^/]+/([^|\]]+)")
+
+
+def vault_dir_names(args):
+    """(inbox, attach) folder names: CLI > config paths.* > built-in default."""
+    try:
+        paths = (load_config().get("paths") or {})
+    except RuntimeError:
+        paths = {}
+    inbox = args.inbox_dir or (paths.get("vault_inbox_dir") or "").strip() or DEFAULT_INBOX_DIR
+    attach = (args.attach_dir_name or (paths.get("vault_attach_dir") or "").strip()
+              or DEFAULT_ATTACH_DIR)
+    return inbox, attach
 
 
 def derive(slug):
@@ -75,8 +96,18 @@ def main():
     ap.add_argument("--vault-root", default=None,
                     help="Obsidian vault root (default: _paths.VAULT_ROOT / "
                          "$CLAUDE_VAULT_ROOT)")
+    ap.add_argument("--inbox-dir", default=None,
+                    help="inbox folder name under the vault root (default: "
+                         "config paths.vault_inbox_dir, else 00Inbox)")
+    ap.add_argument("--attach-dir-name", default=None,
+                    help="attachment folder name under the vault root (default: "
+                         "config paths.vault_attach_dir, else 99Attachment)")
+    ap.add_argument("--note", default="note_draft.md",
+                    help="note file inside the lecture dir (default: note_draft.md)")
+    ap.add_argument("--slug", default=None,
+                    help="attachment slug (default: lecture dir name)")
     ap.add_argument("--force", action="store_true",
-                    help="Overwrite an existing note of the same name in 00Inbox")
+                    help="Overwrite an existing note of the same name in the inbox")
     ap.add_argument("--allow-no-refs", action="store_true",
                     help="Treat a note with zero attachment references as OK "
                          "(default: that is an error)")
@@ -89,17 +120,19 @@ def main():
               "  Pass --vault-root <path> or set the CLAUDE_VAULT_ROOT env var.",
               file=sys.stderr)
         sys.exit(2)
-    attach_root = vault / "99Attachment"
-    inbox = vault / "00Inbox"
+    inbox_name, attach_name = vault_dir_names(args)
+    attach_root = vault / attach_name
+    inbox = vault / inbox_name
+    REF_RE = ref_re(attach_name)
 
     lec = Path(args.lecture_dir).resolve()
-    slug = lec.name
+    slug = args.slug or lec.name
     d_date, d_speaker, d_topic = derive(slug)
     date = args.date or d_date
     speaker = args.speaker or d_speaker
     topic = args.topic or d_topic
 
-    note_path = lec / "note_draft.md"
+    note_path = lec / args.note
     sf_path = lec / "slides_final.json"
     for p in (note_path, sf_path):
         if not p.exists():
@@ -125,7 +158,7 @@ def main():
     if not refs and not args.allow_no_refs:
         # "0 of 0 references resolve" used to print a green tick, certifying
         # nothing — the usual cause is embeds that were never rendered.
-        print("ERROR: no 99Attachment references found in the note — wrong note "
+        print(f"ERROR: no {attach_name} references found in the note — wrong note "
               "or embeds not rendered? Run render_embeds.py, check "
               f"{note_path}, or pass --allow-no-refs if the note really has no "
               "figures.", file=sys.stderr)

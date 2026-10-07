@@ -186,7 +186,9 @@ def main():
     for d in ("_raw", os.path.join("_intermediate", "seg"), "L2", "L3", "figures"):
         os.makedirs(os.path.join(course, d), exist_ok=True)
 
-    manifest = {"path": course,
+    # the clip's own folder: --video may point outside the lecture dir, and
+    # export_web resolves clips against this path
+    manifest = {"path": os.path.dirname(os.path.abspath(video)),
                 "clips": [{"idx": 1, "src": vbase, "name": "clip01"}],
                 "course_type": A.course_type or max(
                     (r["type"] for r in rows),

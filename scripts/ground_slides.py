@@ -10,6 +10,22 @@ Keyword classification (solves abbreviation false-positive problem):
   - drug (-mab/-inib/-statin/...)                     → fuzzy ≥90
   - medical_term (-itis/-oma/-pathy/...)             → fuzzy ≥85
   - general (≥5 chars)                                → fuzzy ≥88
+  - cjk (a run of ≥2 Han chars, one keyword per run)  → 2-3 chars: exact;
+        ≥4 chars: HIT when ≥ keyword_grounding.cjk_bigram_hit_ratio (default 0.4)
+        of the run's character bigrams occur anywhere in the window text
+        (coverage test, not similarity — speech never repeats a slide line
+        verbatim, so fuzzy-matching a whole OCR line against one segment ≈ 0).
+
+CJK text on BOTH sides (OCR/VLM text and transcript) is normalized to Traditional
+with OpenCC s2t first (RapidOCR and Groq ASR emit Simplified; slides may be
+Traditional). OCR lines containing a `dedup.ui_chrome_tokens` entry, or Zoom/Teams
+chrome words (Admin, REC, Workplace, zoom), are dropped before keyword extraction.
+Latin keyword logic is unchanged, except: Latin tokens >18 chars without a hyphen are
+dropped (OCR word-joins); chrome token lines are dropped only when <=8 chars (UI
+labels are short; longer lines keep their text); and keywords present on more than
+keyword_grounding.boilerplate_slide_ratio (default 0.4) of the deck's canonical
+slides (footers, sponsor names, banners) are dropped before scoring — skipped for
+decks of <5 canonical slides.
 
 Usage:
     python ground_slides.py <out_dir> [--config <path>] [--window-seconds 20]
@@ -28,8 +44,10 @@ import os
 import re
 import sys
 import time
+from functools import lru_cache
 
 from _common import atomic_write_json, load_segments
+from dedup_semantic import _DEFAULT_UI_CHROME_TOKENS
 
 
 # --------------------------- optional deps ------------------------------------
@@ -54,6 +72,26 @@ def try_import_yaml():
         return None
 
 
+_OPENCC = None  # None = not tried yet; False = unavailable (warned once)
+
+
+@lru_cache(maxsize=None)
+def _to_trad(text):
+    """Normalize CJK text to Traditional (OpenCC s2t). Degrades loudly, not silently."""
+    global _OPENCC
+    if _OPENCC is None:
+        try:
+            from opencc import OpenCC
+            _OPENCC = OpenCC("s2t")
+        except ImportError:
+            print("WARNING: opencc not installed (pip install "
+                  "opencc-python-reimplemented); Simplified/Traditional text is NOT "
+                  "normalized, CJK keyword hits will be under-counted.",
+                  file=sys.stderr)
+            _OPENCC = False
+    return _OPENCC.convert(text) if _OPENCC else text
+
+
 # --------------------------- config defaults ----------------------------------
 
 DEFAULT_CONFIG = {
@@ -74,6 +112,12 @@ DEFAULT_CONFIG = {
             "algia", "emia", "rhea", "centesis",
         ],
         "clinical_domain_map": {},
+        # CJK keyword (run of >=4 Han chars) hits when this fraction of its
+        # character bigrams occurs in the window text. 2-3 char runs: exact.
+        "cjk_bigram_hit_ratio": 0.4,
+        # Keywords found on more than this fraction of the deck's canonical slides
+        # (footers, sponsor names, banners) are ignored. Skipped for decks <5 slides.
+        "boilerplate_slide_ratio": 0.4,
         "emphasis_cues_zh": ["重要", "最重要", "核心", "記住", "注意",
                               "千萬", "關鍵", "重點", "一定要"],
         "emphasis_cues_en": ["key point", "important", "remember", "critical",
@@ -124,11 +168,54 @@ def load_config(config_path):
 TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9\-]{1,}|[一-鿿]{2,}")
 
 
+_CJK_RUN_RE = re.compile(r"[一-鿿]+")
+_CJK_TOKEN_RE = re.compile(r"^[一-鿿]{2,}$")
+# Latin-script screen-share chrome (Zoom/Teams); CJK chrome comes from config.
+# Lookarounds, not \b: OCR glues it to Han chars ("Admin的幕") and \w includes Han;
+# "o?rec" also catches the "OREC" garble of the REC badge.
+_LATIN_CHROME_RE = re.compile(
+    r"(?<![A-Za-z])(?:admin|o?rec|workplace|zoom)(?![A-Za-z])", re.IGNORECASE)
+
+
+def _chrome_tokens(cfg):
+    toks = (cfg.get("dedup") or {}).get("ui_chrome_tokens")
+    if not (isinstance(toks, list) and toks):
+        toks = _DEFAULT_UI_CHROME_TOKENS
+    # Normalized too: the lines they are tested against are already Traditional.
+    return [_to_trad(str(t)) for t in toks]
+
+
+# CJK chrome tokens only drop SHORT lines: UI labels are short, slide sentences that
+# merely contain e.g. 人員 / 共享 must keep their text. 登入 / 登人 (Zoom login label,
+# and its OCR garble) ride on the same rule without touching dedup.ui_chrome_tokens.
+_CHROME_MAX_LINE_LEN = 8
+_EXTRA_SHORT_CHROME = ("登入", "登人")
+# OCR-glued Latin words ("figureadaptedfromsantoroa") never match speech.
+_LATIN_GLUE_MIN_LEN = 19
+
+
+def _drop_chrome_lines(text, chrome_tokens):
+    """Remove OCR lines that are screen-share UI chrome (text is already Traditional)."""
+    keep = []
+    for ln in (text or "").splitlines():
+        if _LATIN_CHROME_RE.search(ln):
+            continue
+        if len(ln.strip()) <= _CHROME_MAX_LINE_LEN and any(
+                tok in ln for tok in tuple(chrome_tokens) + _EXTRA_SHORT_CHROME):
+            continue
+        keep.append(ln)
+    return "\n".join(keep)
+
+
 def classify_keyword(token, cfg):
     g = cfg["keyword_grounding"]
     if not token:
         return None
     t = token.strip()
+    if _CJK_TOKEN_RE.match(t):
+        return "cjk"
+    if len(t) >= _LATIN_GLUE_MIN_LEN and "-" not in t:
+        return None
     # Abbreviation: ≤4 chars and uppercase, OR in whitelist
     if (len(t) <= 4 and t.isupper() and t.isalpha()) or t.upper() in {
             x.upper() for x in g.get("abbreviation_whitelist", [])}:
@@ -149,15 +236,18 @@ def extract_keywords(slide, cfg):
     """Return list of (token, type) tuples deduplicated, lowercased except abbr."""
     ocr = slide.get("ocr") or {}
     vlm = slide.get("vlm_signals") or {}
+    chrome = _chrome_tokens(cfg)
+    # OCR engines see the Zoom/Teams chrome; vlm_text / visible_labels do not.
     texts = [
-        ocr.get("clean_text") or "",   # Stage B2 (Surya) high-quality OCR, preferred
-        ocr.get("vlm_text") or "",
-        ocr.get("quick_text") or "",
-        ocr.get("quick_title_guess") or "",
+        # Stage B2 (Surya) high-quality OCR, preferred
+        _drop_chrome_lines(_to_trad(ocr.get("clean_text") or ""), chrome),
+        _to_trad(ocr.get("vlm_text") or ""),
+        _drop_chrome_lines(_to_trad(ocr.get("quick_text") or ""), chrome),
+        _drop_chrome_lines(_to_trad(ocr.get("quick_title_guess") or ""), chrome),
     ]
     for lab in (vlm.get("visible_labels") or []):
         if isinstance(lab, str):
-            texts.append(lab)
+            texts.append(_to_trad(lab))
     blob = "\n".join(texts)
 
     seen = {}
@@ -239,6 +329,29 @@ def keyword_hit(seg_texts_lower, kw, kw_type, fuzz_lib):
     return any(fuzz_lib.partial_ratio(kwl, t) >= threshold for t in seg_texts_lower)
 
 
+def _cjk_runs(texts):
+    """Han-only runs per transcript segment (whitespace between Han chars removed,
+    since ASR segments sometimes carry stray spaces inside a word)."""
+    runs = []
+    for t in texts:
+        t = re.sub(r"(?<=[一-鿿])\s+(?=[一-鿿])", "", t or "")
+        runs.extend(_CJK_RUN_RE.findall(t))
+    return runs
+
+
+def cjk_hit(window_runs, window_bigrams, kw, ratio):
+    """CJK keyword (one run of >=2 Han chars) hit test over the window text.
+
+    2-3 chars: the run must occur verbatim. >=4 chars: at least `ratio` of the
+    run's character bigrams must occur somewhere in the window — a coverage test,
+    so a slide line paraphrased or split across sentences still counts.
+    """
+    if len(kw) < 4:
+        return any(kw in r for r in window_runs)
+    bigrams = {kw[i:i + 2] for i in range(len(kw) - 1)}
+    return len(bigrams & window_bigrams) / len(bigrams) >= ratio
+
+
 def abbreviation_hit(orig_text, kw):
     pattern = re.compile(rf"(?<![A-Za-z0-9]){re.escape(kw)}(?![A-Za-z0-9])")
     return pattern.search(orig_text) is not None
@@ -259,7 +372,27 @@ def cue_density(seg_texts, cues):
 
 # --------------------------- per-slide grounding ------------------------------
 
-def compute_signals(slide, segments, cfg, fuzz_lib, window_seconds):
+def deck_boilerplate(slides, cfg):
+    """Keywords present on > boilerplate_slide_ratio of the canonical slides.
+
+    Footers, sponsor names and conference banners repeat on every slide but are
+    never spoken, so they only dilute reference_density. Computed once per run;
+    returns an empty set for decks of <5 canonical slides (too few to call
+    anything "repeated").
+    """
+    ratio = float(cfg["keyword_grounding"].get("boilerplate_slide_ratio", 0.4))
+    canon = [s for s in slides if s.get("dedup", {}).get("is_canonical")]
+    if len(canon) < 5:
+        return frozenset()
+    df = {}
+    for s in canon:
+        for kw, _ in extract_keywords(s, cfg):
+            df[kw] = df.get(kw, 0) + 1
+    return frozenset(kw for kw, n in df.items() if n / len(canon) > ratio)
+
+
+def compute_signals(slide, segments, cfg, fuzz_lib, window_seconds,
+                    boilerplate=frozenset()):
     g = cfg["keyword_grounding"]
 
     ts_start = slide.get("timestamp_start", 0) or 0
@@ -268,13 +401,17 @@ def compute_signals(slide, segments, cfg, fuzz_lib, window_seconds):
     w_end = ts_end + window_seconds
 
     win = window_segments(segments, w_start, w_end)
-    seg_texts = [s.get("text", "") or "" for _, s in win]
+    seg_texts = [_to_trad(s.get("text", "") or "") for _, s in win]
     seg_ids = [i for i, _ in win]
     combined = " ".join(seg_texts)
     seg_texts_lower = [t.lower() for t in seg_texts]
     word_count = len(re.findall(r"\S+", combined))
+    window_runs = _cjk_runs(seg_texts)
+    window_bigrams = {r[i:i + 2] for r in window_runs for i in range(len(r) - 1)}
+    cjk_ratio = float(g.get("cjk_bigram_hit_ratio", 0.4))
 
-    keywords = extract_keywords(slide, cfg)
+    keywords = [(k, t) for k, t in extract_keywords(slide, cfg)
+                if k not in boilerplate]
     if not keywords:
         speaker_reference_density = 0.0
         hit_keywords = []
@@ -283,6 +420,9 @@ def compute_signals(slide, segments, cfg, fuzz_lib, window_seconds):
         for kw, kt in keywords:
             if kt == "abbreviation":
                 if abbreviation_hit(combined, kw):
+                    hits.append(kw)
+            elif kt == "cjk":
+                if cjk_hit(window_runs, window_bigrams, kw, cjk_ratio):
                     hits.append(kw)
             else:
                 if keyword_hit(seg_texts_lower, kw, kt, fuzz_lib):
@@ -412,6 +552,10 @@ def main():
         slides = json.load(f)
     segments = load_transcript(args.out_dir)
 
+    boilerplate = deck_boilerplate(slides, cfg)
+    if boilerplate:
+        print(f"  Deck boilerplate keywords dropped: {len(boilerplate)}")
+
     start = time.time()
     grounded = []
     for s in slides:
@@ -419,7 +563,8 @@ def main():
             s["pipeline_stage"] = "grounded"
             grounded.append(s)
             continue
-        sig = compute_signals(s, segments, cfg, fuzz_lib, args.window_seconds)
+        sig = compute_signals(s, segments, cfg, fuzz_lib, args.window_seconds,
+                              boilerplate)
         s["transcript_signals"] = sig["transcript_signals"]
         s["retrieval"] = sig["retrieval"]
         s.setdefault("ocr", {})["grounding_support"] = sig["grounding_support"]

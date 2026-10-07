@@ -4,6 +4,11 @@ description: "Turn a lecture/conference recording (video or audio: MOV/MP4/M4A/M
 allowed-tools: Read Write Edit Bash Glob Grep Agent
 ---
 
+> **Local default flow (this fork):** one-command runner `scripts/run_lecture.py`
+> (prepare → `--tier` → `--render` → `--finish`), CPU primary transcript with a
+> Groq audit, YouTube input — see `docs/MY_PIPELINE.md` and
+> `reference/stage-f-prompts.md`. The steps below remain the underlying spec.
+
 # Lecture-to-Notes
 
 Turn a lecture recording (video or audio-only) into structured notes. Every heavy

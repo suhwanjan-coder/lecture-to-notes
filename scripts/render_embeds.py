@@ -102,12 +102,55 @@ def attachment_name(s, missing_names):
     return name
 
 
+CAPTION_MAX = 34  # note-spec rule C2; audit_note WARNs past 45 chars for the whole "sN — … (Tn)" title
+_CAPTION_SEPS = ("——", "：", "，", "（", "；")
+
+
+def split_caption(cap):
+    """(short, rest) for a figure caption. A caption of <= CAPTION_MAX chars is
+    returned whole. Longer: split at the first of —— ： ， （ ； that starts
+    within the first CAPTION_MAX chars (separator dropped), else at
+    CAPTION_MAX on a word boundary (CJK: anywhere). An unmatched （ left at
+    the end of `short`, or an unmatched ） left in `rest`, is dropped."""
+    cap = (cap or "").strip()
+    if len(cap) <= CAPTION_MAX:
+        return cap, ""
+    hits = [(cap.find(sep), sep) for sep in _CAPTION_SEPS
+            if 0 < cap.find(sep) <= CAPTION_MAX]
+    if hits:
+        idx, sep = min(hits)
+        short, rest = cap[:idx], cap[idx + len(sep):]
+        if sep == "（":  # the bracket opens the rest: keep its content, drop the pair
+            rest = rest.replace("）", "", 1) if "）" in rest else rest
+    else:
+        cut = CAPTION_MAX
+        if (cap[cut - 1].isascii() and cap[cut - 1].isalnum()
+                and cap[cut].isascii() and cap[cut].isalnum()):
+            sp = cap.rfind(" ", 0, cut)
+            if sp > 0:
+                cut = sp
+        short, rest = cap[:cut], cap[cut:]
+    if short.count("（") > short.count("）"):  # unmatched opener at the end
+        k = short.rfind("（")
+        rest = short[k + 1:] + (rest if not rest or rest[0] in "，；：" else " " + rest)
+        short = short[:k]
+    short = short.strip().rstrip("，、；：—- ")
+    rest = rest.strip().lstrip("，、；：—- ")
+    if rest.count("）") > rest.count("（"):  # unmatched closer
+        k = rest.rfind("）")
+        rest = (rest[:k] + rest[k + 1:]).strip()
+    return short, rest
+
+
 def callout(attach_root, s, intent, missing_names):
     name = attachment_name(s, missing_names)
     width = s.get("embed_width") or 500
     cap = (intent or s.get("section_suggestion")
            or (s.get("retrieval") or {}).get("summary_sentence") or "figure")
-    return (f"> [!figure] s{int(s['slide_id'])} — {cap} (T{tier_of(s)})\n"
+    short, rest = split_caption(cap)
+    second = f"> {rest}\n" if rest else ""
+    return (f"> [!figure] s{int(s['slide_id'])} — {short} (T{tier_of(s)})\n"
+            f"{second}"
             f"> ![[{attach_root}/{name}|{width}]]")
 
 
