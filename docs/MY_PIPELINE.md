@@ -15,8 +15,8 @@
 | 2 轉錄稽核（外部） | Groq 再轉一次，只拿來比對，不取代主稿；列出崩壞段、漏段、數字不一致 | `scripts/asr_audit.py` | 腳本 |
 | 3 投影片 | 擷取畫面、OCR、去重、VLM 語意、逐字稿對位 | 既有 Stage A–E | 腳本 |
 | 4 分級 | 依 note-spec 計分規則決定每張投影片要不要放 | `scripts/tier_pass.py` | 腳本 |
-| 5 寫筆記 | 寫筆記 → 獨立查核 → 文獻補齊 → 分段整理稿 | `reference/stage-f-prompts.md` | Claude |
-| 6 收尾 | 展開圖片、稽核、HTML、寫入 vault、Web viewer | `scripts/run_lecture.py --finish` | 腳本 |
+| 5 寫筆記 | 寫筆記 → 獨立查核（文獻補齊、分段整理稿只在要求時做） | `reference/stage-f-prompts.md` | Claude |
+| 6 收尾 | 寫入 vault、單檔 HTML；Web viewer 只在要求時做 | `scripts/run_lecture.py --finish [--viewer]` | 腳本 |
 
 指令：
 
@@ -31,8 +31,8 @@ python scripts/run_lecture.py <輸出資料夾> --finish
 |---|---|
 | 第一行（準備） | 停在「READY FOR STAGE F」。確認講者後，把講者、主題、日期填進 `lecture.json` |
 | `--tier` | 產出 `slides_final.json`，交給 Claude 寫筆記（第 1 輪） |
-| `--render` | 產出正式筆記檔並稽核，交給 Claude 查核、補文獻、寫分段整理稿（第 2–4 輪） |
-| `--finish` | 寫入 vault、產出單檔 HTML 與 Web viewer |
+| `--render` | 產出正式筆記檔並稽核，交給 Claude 獨立查核（第 2 輪） |
+| `--finish` | 寫入 vault、產出單檔 HTML。加 `--viewer` 才做 Web viewer |
 
 實際上只要在這個 repo 開 Claude Code，說「跑演講筆記 <影片路徑或網址>」，Claude 會照順序執行這四步與四輪寫作。資料夾輸入只會列出裡面的檔案，不會替你挑影片。
 
@@ -44,6 +44,8 @@ python scripts/run_lecture.py <輸出資料夾> --finish
 - **稽核看三件事。** 某段只有一邊有文字（漏段）、某段文字一直重複（崩壞）、同一段兩邊的數字不同。數字不同最重要，因為筆記的價值在數字。
 - **講者身分以介紹段為準。** 論壇錄影開頭常是別人致詞；以主持人介紹與主講標題頁判定，不看第一張畫面。
 - **寫筆記與查核分開。** 寫的人不驗自己的稿；查核者先讀逐字稿再讀筆記，數字逐一回查。
+- **文獻不另外求證。** 筆記只列講者或投影片點名的來源，書目不完整就標 `⚠️ 待補`，不再逐篇查 PubMed。要深入時再下指令跑第 3 輪。
+- **Web viewer 非必要。** 需要時說「做 Web viewer」，先跑第 4 輪寫分段整理稿，再 `--finish --viewer`。影片一律壓成 H.264，所有瀏覽器都能播。
 - **Vault 位置。** 筆記進 `00-Inbox\`，圖片進 `99-Attachment\lecture_<slug>\`，在 `config.yaml` 的 `paths.vault_*` 設定。
 
 ## 這次實跑修掉的問題

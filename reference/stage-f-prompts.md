@@ -7,12 +7,16 @@ rely on live in `note-spec.md` — the templates point there instead of copying.
 
 Order and tiers (cheapest sufficient, per the house dispatch rules):
 
-| Pass | Model | Runs after | Writes |
+| Pass | Model | Runs | Writes |
 |---|---|---|---|
-| 1 Write | Opus | `run_lecture.py` reached "ready for Stage F" | `note_draft.md` |
-| 2 Verify | Sonnet, fresh context | render + audit 0 FAIL | report only |
-| 3 Resource | Sonnet | verify fixes applied | `# Resource` section only |
-| 4 L3 / viewer | Sonnet | note final (may run parallel to 3) | `seg_plan.json`, `L3/*.md` |
+| 1 Write | Opus | always, after `--tier` | `note_draft.md` |
+| 2 Verify | Sonnet, fresh context | always, after `--render` | report only |
+| 3 Resource | Sonnet | ==only on request== | `# Resource` section only |
+| 4 L3 / viewer | Sonnet | ==only on request== (then `--finish --viewer`) | `seg_plan.json`, `L3/*.md` |
+
+Default (阿志 2026-10-07): references are NOT looked up — the writer lists only
+sources the lecture named and marks incomplete ones `⚠️ 待補`; anything that
+cannot be confirmed is marked, not researched. The web viewer is optional.
 
 The commander applies pass-2 findings itself (they are few and need judgment),
 then runs `run_lecture.py <dir> --finish`.

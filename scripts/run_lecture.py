@@ -14,8 +14,12 @@ unless --force):
 
     # (Claude passes 2-4: verify, Resource, L3 segments)
 
-    # 3. finish: final note -> vault + single-file HTML + web viewer
-    python run_lecture.py <lecture_dir> --finish
+    # 3. finish: final note -> vault + single-file HTML
+    python run_lecture.py <lecture_dir> --finish [--viewer]
+
+The web viewer (video + transcript + L3 segments) is OPTIONAL — only on request:
+`--finish --viewer` after Stage F pass 4 has written seg_plan.json + L3/. It
+encodes H.264, which every browser plays (H.265 needs hardware/OS support).
 
 Lecture identity (speaker / topic / date) lives in <lecture_dir>/lecture.json.
 `prepare` creates it with blanks; the Stage F commander fills it once the
@@ -227,8 +231,8 @@ def render(a):
     r.sh("audit", [PY, script("audit_note.py"), final, "--mode", "lecture",
                    "--grounding", lec, "--vault", lec], ok_codes=(0, 1))
     r.say(f"FINAL NOTE: {final}")
-    r.say("next: Stage F pass 2 (Verify) on this file, apply fixes, pass 3 (Resource), "
-          f"pass 4 (L3), then: python {script('run_lecture.py')} {lec} --finish")
+    r.say("next: Stage F pass 2 (Verify) on this file, apply fixes, then: "
+          f"python {script('run_lecture.py')} {lec} --finish")
 
 
 def attach_rel(info):
@@ -283,14 +287,14 @@ def finish(a):
         html_args += ["--vault", vault]
     r.sh("note_to_html", html_args)
 
-    plan = lec / "seg_plan.json"
-    l3_dir = lec / "L3"
-    if plan.exists() and l3_dir.is_dir() and any(l3_dir.glob("L3_seg*.md")):
+    if a.viewer:
+        plan = lec / "seg_plan.json"
+        l3_dir = lec / "L3"
+        if not (plan.exists() and l3_dir.is_dir() and any(l3_dir.glob("L3_seg*.md"))):
+            raise SystemExit("STOP: --viewer needs seg_plan.json + L3/ (Stage F pass 4)")
         r.sh("export_web", [PY, script("export_web.py"), lec,
                             "--name", f"{info['speaker']}｜{info.get('title') or info['topic']}",
-                            "--date", info["date"]])
-    else:
-        r.say("web viewer: skipped — no seg_plan.json / L3 files yet (Stage F pass 4)")
+                            "--date", info["date"], "--codec", "h264"])
     r.say("FINISHED")
 
 
@@ -310,6 +314,8 @@ def main():
                     help="skip the Groq audit (required for patient data / internal meetings)")
     ap.add_argument("--no-vlm", action="store_true")
     ap.add_argument("--no-vault", action="store_true")
+    ap.add_argument("--viewer", action="store_true",
+                    help="finish: also export the web viewer (optional; needs Stage F pass 4)")
     ap.add_argument("--force", action="store_true")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--tier", action="store_true", help="run the deterministic Tier-pass")
