@@ -16,3 +16,10 @@ This fork carries 阿志's local default flow. When asked to process a lecture
 
 `SKILL.md` and `reference/` remain the upstream, tool-agnostic spec; local
 changes extend them and never contradict them.
+
+## After changing any scoring / tier / grounding code
+
+Run `python tests/regression.py` (seconds, 0 LLM calls). A difference means
+slide scores or tiers moved; if intended, re-run with `--update`. Fixtures in
+`tests/fixtures/` hold real lecture text and are gitignored (public repo) — add
+a new one with `--make-fixture NAME <lecture_dir>` after each real lecture.

@@ -35,3 +35,6 @@ ocr_bench/report.md
 Thumbs.db
 .idea/
 .vscode/
+
+# regression fixtures hold real lecture text — never commit (public repo)
+tests/fixtures/
