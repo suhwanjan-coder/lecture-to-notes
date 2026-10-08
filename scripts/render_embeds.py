@@ -144,7 +144,7 @@ def split_caption(cap):
 
 def callout(attach_root, s, intent, missing_names):
     name = attachment_name(s, missing_names)
-    width = s.get("embed_width") or 500
+    width = s.get("embed_width") or 700
     cap = (intent or s.get("section_suggestion")
            or (s.get("retrieval") or {}).get("summary_sentence") or "figure")
     short, rest = split_caption(cap)

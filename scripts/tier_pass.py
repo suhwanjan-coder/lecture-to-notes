@@ -81,21 +81,31 @@ def clean_title(s, tokens):
     return ""
 
 
-def embed_width(v):
-    """Width table (note-spec#widths)."""
+DEFAULT_WIDTHS = {"imaging": 800, "diagram": 700, "chart": 700, "table": 600,
+                  "default": 700}
+
+
+def embed_width(v, widths=None):
+    """Width table (note-spec#widths); sizes come from config `embed_widths`.
+
+    Raised 2026-10-07 (阿志: screenshots too small): video frames carry the
+    conference UI around the slide, so the slide itself is ~60% of the frame
+    and the old 400-600 px left its text hard to read.
+    """
+    w = dict(DEFAULT_WIDTHS, **(widths or {}))
     ct = set(v.get("content_type") or [])
     fn = set(v.get("apparent_educational_function") or [])
     if ct & IMG or v.get("contains_clinical_imaging"):
-        return 600
+        return w["imaging"]
     if "anatomy" in ct:
-        return 500
+        return w["diagram"]
     if "flowchart" in ct or v.get("contains_algorithm") or fn & FORCE1_FN:
-        return 500
+        return w["diagram"]
     if ct & {"chart", "kaplan_meier", "scatter_plot"}:
-        return 500
+        return w["chart"]
     if (ct - {"title"}) == {"table"}:
-        return 400
-    return 500
+        return w["table"]
+    return w["default"]
 
 
 def score_slide(s, cfg):
@@ -184,7 +194,8 @@ def main():
         row["combined_score"] = round(score, 3)
         row["tier"] = int(tier)
         row["tier_override_reason"] = reason
-        row["embed_width"] = embed_width(s.get("vlm_signals") or {}) if tier in (1, 2) else None
+        row["embed_width"] = (embed_width(s.get("vlm_signals") or {}, full_cfg.get("embed_widths"))
+                              if tier in (1, 2) else None)
         row["embed_suppressed_reason"] = None
         title = clean_title(s, tokens) or f"slide {s['slide_id']}"
         row["retrieval"] = dict(s.get("retrieval") or {})

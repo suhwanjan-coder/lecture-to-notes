@@ -70,6 +70,15 @@ dedup:
     - 靜音
     - 解除
 
+# Figure widths in px for Obsidian embeds (tier_pass.py). Video frames include the
+# conference UI around the slide, so these run larger than the note-spec defaults.
+embed_widths:
+  imaging: 800    # ultrasound / x-ray / MRI / clinical photos
+  diagram: 700    # flowchart, algorithm, anatomy
+  chart: 700      # charts, KM curves, scatter plots
+  table: 600      # a table-only slide (when not reproduced as markdown)
+  default: 700
+
 scoring:
   # Each weight applies to the matching transcript_signals or vlm_signals field.
   # combined_score starts as sum(weight * signal), then add bonuses + penalties, clip to [0, 1].

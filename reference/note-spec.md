@@ -291,6 +291,11 @@ Obsidian's default full-column width buries the surrounding text.
 | Comparison table as image (==only if not also reproduced as a markdown table==) | **400** | `table` only |
 | Pure text / mnemonic / bullet list | **don't embed** | Tier 3 by the P1 rule |
 
+==Local override (2026-10-07)==: `tier_pass.py` reads the sizes from
+`config.yaml` `embed_widths` — this fork defaults to imaging 800 / diagram and
+chart 700 / table 600, because video frames carry the conference UI around the
+slide and the table above left slide text too small to read.
+
 Synthesis must record the chosen width in `slides_final.json` under
 `embed_width`, so a later run can audit sizing without re-reading the note.
 
