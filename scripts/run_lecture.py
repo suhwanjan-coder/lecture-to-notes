@@ -24,7 +24,9 @@ encodes H.264, which every browser plays (H.265 needs hardware/OS support).
 Lecture identity (speaker / topic / date) lives in <lecture_dir>/lecture.json.
 `prepare` creates it with blanks; the Stage F commander fills it once the
 speaker is confirmed from the chair's introduction (never from frame 1).
---render and --finish refuse while it is incomplete.
+--render and --finish refuse while it is incomplete. Its optional "layout" picks
+the note layout before --tier: "all-slides" (slide-deck talks: every slide goes
+into 總整理, no importance filter) or "tiered" (default; screen-share demos).
 
 Every child process is logged as UTF-8 to <lecture_dir>/logs/run_lecture.log
 (PowerShell Tee-Object writes UTF-16, which made earlier logs unreadable).
@@ -151,7 +153,7 @@ def prepare(a):
         info.update({"media": media, "subs": res.get("subs"), "meta": res.get("meta"),
                      "source": a.input, "lang": a.lang,
                      "speaker": info.get("speaker", ""), "topic": info.get("topic", ""),
-                     "date": info.get("date", "")})
+                     "date": info.get("date", ""), "layout": info.get("layout", "")})
         save_lecture_json(lec, info)
     r.say(f"media: {media}")
 
@@ -206,6 +208,26 @@ def tier(a):
     r = Run(lec, True)
     info = require_identity(lec)
     r.sh("tier_pass", [PY, script("tier_pass.py"), lec, "--prefix", info["prefix"]])
+    if info.get("layout") == "all-slides":
+        open_all_slides(lec, r)
+
+
+def open_all_slides(lec: Path, r):
+    """layout "all-slides" (lecture.json): no importance filter — every frame that
+    exists and is not suppressed becomes embeddable (tier <= 2); the writer places
+    each slide in 總整理 and decides what is minor. The scored tier is kept in
+    `tier_scored` so the regression fixtures and later reviews can still see it."""
+    p = lec / "slides_final.json"
+    slides = json.loads(p.read_text(encoding="utf-8"))
+    n = 0
+    for s in slides:
+        s["tier_scored"] = s["tier"]
+        if not s.get("missing_frame") and not s.get("embed_suppressed_reason"):
+            if parse_tier(s.get("tier")) > 2:
+                s["tier"] = 2
+            n += 1
+    p.write_text(json.dumps(slides, ensure_ascii=False, indent=1), encoding="utf-8")
+    r.say(f"layout all-slides: {n}/{len(slides)} slides embeddable (scored tier kept in tier_scored)")
 
 
 # ------------------------------------------------------------------- render --
@@ -217,7 +239,7 @@ def render(a):
     if not (lec / "note_draft.md").exists():
         raise SystemExit("STOP: note_draft.md not found — run Stage F pass 1 first")
     r.sh("render_embeds", [PY, script("render_embeds.py"), lec, "--note", "note_draft.md",
-                           "--slug", info["slug"]])
+                           "--slug", info["slug"], "--no-tier-tag"])
     final = lec / info["note_name"]
     if final.exists() and not a.force:
         raise SystemExit(f"STOP: {final.name} exists (it may carry review fixes). "

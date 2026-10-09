@@ -14,7 +14,7 @@
 | 1 轉錄（主） | 本機 CPU Whisper medium，資料不離開本機 | `scripts/transcribe_video.py --device cpu --model medium` | 腳本 |
 | 2 轉錄稽核（外部） | Groq 再轉一次，只拿來比對，不取代主稿；列出崩壞段、漏段、數字不一致 | `scripts/asr_audit.py` | 腳本 |
 | 3 投影片 | 擷取畫面、OCR、去重、VLM 語意、逐字稿對位 | 既有 Stage A–E | 腳本 |
-| 4 分級 | 依 note-spec 計分規則決定每張投影片要不要放 | `scripts/tier_pass.py` | 腳本 |
+| 4 分級 | 依 note-spec 計分規則決定每張投影片要不要放；投影片講座改用 all-slides 版面，全部放 | `scripts/tier_pass.py` | 腳本 |
 | 5 寫筆記 | 寫筆記 → 獨立查核（文獻補齊、分段整理稿只在要求時做） | `reference/stage-f-prompts.md` | Claude |
 | 6 收尾 | 寫入 vault、單檔 HTML；Web viewer 只在要求時做 | `scripts/run_lecture.py --finish [--viewer]` | 腳本 |
 
@@ -37,6 +37,23 @@ python scripts/run_lecture.py <輸出資料夾> --finish
 實際上只要在這個 repo 開 Claude Code，說「跑演講筆記 <影片路徑或網址>」，Claude 會照順序執行這四步與四輪寫作。資料夾輸入只會列出裡面的檔案，不會替你挑影片。
 
 端到端測試（2026-10-07）：CDC 公開演講的 2 分鐘 YouTube 片段，從下載到可寫筆記約 2.5 分鐘，四個指令都 exit 0。
+
+一律用 repo 的 `.venv\Scripts\python.exe` 執行（系統 Python 沒有 OCR 套件，會在轉錄跑完一小時後才在 OCR 停住）。
+
+## 筆記版面（2026-10-09 定案）
+
+確認講者時，順便看畫面決定版面，寫進 `lecture.json` 的 `layout`，再跑 `--tier`：
+
+| 講座類型 | `layout` | 總整理的圖 | 逐投影片筆記 |
+|---|---|---|---|
+| 投影片講座 | `all-slides` | 每張投影片都放在講到它的段落；不重要的一行帶過；重複圖與章節頁預設收合、縮小 | 純文字索引（時間 → 所在小節） |
+| 螢幕分享、操作示範 | `tiered`（預設） | 依分級，T1 放總整理；畫面上的重點文字整理成表格 | 每張 T1／T2 畫面附說明 |
+
+不依重要度分數篩掉講者的投影片，是阿志的裁示：分級擅長排序，但不該決定讀者看不看得到講者自己的投影片。兩種版面的總整理每一小節最後，都加一則 `〔整理者補充〕對主任秘書的用處`，做成獨立的提示框，明確標示不是講者說的。
+
+## 講座資料夾整理
+
+每場收尾後整理 `D:\lectures\<講座>\`：根目錄只留會打開的檔案（影片、HTML 筆記；有 Web viewer 時加上 viewer 與分享說明），其餘全部移進 `_archive\`。之後要補 Web viewer 或第 3 輪，對 `_archive\_out` 執行即可。筆記 md 的正本在 vault。
 
 ## 預設值與理由
 

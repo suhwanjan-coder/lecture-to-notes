@@ -12,7 +12,12 @@ This fork carries 阿志's local default flow. When asked to process a lecture
 3. Defaults: CPU Whisper is the primary transcript; Groq is an external auditor
    only (`asr_audit.md`). Pass `--no-groq` for patient data or internal meetings.
 4. Confirm the speaker from the chair's introduction / main title slide before
-   filling `lecture.json` — never from the first frame.
+   filling `lecture.json` — never from the first frame. In the same step set
+   `"layout"`: `"all-slides"` for slide decks, `"tiered"` for screen-share demos
+   (`reference/stage-f-prompts.md` "Layout").
+5. Run every script with `.venv\Scripts\python.exe` (system Python lacks OCR).
+   After `--finish`, tidy `D:\lectures\<lecture>\`: root keeps what 阿志 opens
+   (video, HTML, viewer), everything else goes to `_archive\`.
 
 `SKILL.md` and `reference/` remain the upstream, tool-agnostic spec; local
 changes extend them and never contradict them.

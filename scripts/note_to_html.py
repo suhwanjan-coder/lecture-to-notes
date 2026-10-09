@@ -42,7 +42,7 @@ mark{background:#fff3a0}code{background:#eee;padding:0 4px;border-radius:3px}
 img{max-width:100%;height:auto}"""
 
 IMG_RE = re.compile(r"!\[\[([^\]|]+)\|?(\d+)?\]\]")
-CALLOUT_RE = re.compile(r"^> \[!(\w+)\][+-]?\s*(.*)$")
+CALLOUT_RE = re.compile(r"^> \[!(\w+)\]([+-]?)\s*(.*)$")
 
 
 def find_image(path, bases):
@@ -83,14 +83,19 @@ def convert(text, bases):
     while i < len(lines):
         m = CALLOUT_RE.match(lines[i])
         if m:
-            typ, title = m.group(1).lower(), m.group(2)
+            typ, fold, title = m.group(1).lower(), m.group(2), m.group(3)
             body = []
             i += 1
             while i < len(lines) and lines[i].startswith(">"):
                 body.append(lines[i][1:].lstrip(" "))
                 i += 1
-            out.append(f'<div class="co {typ}"><div class="ct">{html.escape(title, quote=False)}</div>\n\n'
-                       + "\n".join(body) + "\n\n</div>")
+            t = html.escape(title, quote=False)
+            if fold:  # Obsidian foldable callout: `-` starts collapsed, `+` open
+                out.append(f'<details class="co {typ}"{" open" if fold == "+" else ""}>'
+                           f'<summary class="ct">{t}</summary>\n\n' + "\n".join(body) + "\n\n</details>")
+            else:
+                out.append(f'<div class="co {typ}"><div class="ct">{t}</div>\n\n'
+                           + "\n".join(body) + "\n\n</div>")
             continue
         out.append(lines[i])
         i += 1

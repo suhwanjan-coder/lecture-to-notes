@@ -18,6 +18,7 @@ prompts must carry. Consolidated from the note quality spec (user-authored,
 - [Tier scoring](#tier-scoring)
 - [Width table](#widths)
 - [Embed format and placement](#embed-format)
+- [Optional layout: all-slides](#all-slides)
 - [Note structure template](#structure)
 - [Prompt requirements](#prompt-requirements)
 - [Running the auditor](#auditor)
@@ -327,6 +328,42 @@ Note filename: `{date}_{speaker}_{topic}.md` in the inbox folder, no `lecture_`
 prefix. Attachment renumbering is sequential among *cited* slides, not by
 original `slide_id` — `s01..s30` reads better than `s03, s07, s12, …`. The
 original→renumbered map lives in `slides_final.json` under `attachment_name`.
+
+## Optional layout: all-slides {#all-slides}
+
+An opt-in alternative to tier-gated placement, for ==slide-deck talks==. Set
+`"layout": "all-slides"` in `lecture.json` before the tier pass; the default
+(`"tiered"`, everything above) stays right for screen-share demos, where frames
+are mostly browser/terminal views and a few key screens plus markdown tables
+read better than dozens of near-identical captures.
+
+Why it exists: with tier gating only Tier 1 reaches `# 總整理`, and real talks
+produced 0–2 figures there (C1 says 總整理 must carry the figures needed to
+understand it). Scoring is good at ranking but should not decide which of the
+speaker's own slides a reader may see.
+
+Rules (they replace the tier-placement rules of Step 6 and the B/C embed rules
+for this layout only; every other rule still applies):
+
+- **No importance filter.** The tier pass still runs (scores stay in
+  `tier_scored` for review), then every frame that exists and is not suppressed
+  becomes embeddable.
+- **Every slide once, in 總整理**, right after the paragraph it supports, in the
+  subsection where the speaker discussed it. An important slide is explained by
+  the surrounding text; a minor one (title page, divider, photo, a list the text
+  already covers) gets its caption plus at most one plain sentence.
+- **Frames with no slide** (room camera, black, transition, someone else's
+  accidental screen share) may be left out; list them with the reason in the
+  index.
+- **Near-duplicates** (the same slide re-shown, the same page re-captured): embed
+  the most informative one and name the others with their times in its caption.
+- **Repeated slides and section dividers fold**: write `[[EMBED- sN: …]]`;
+  render_embeds.py emits a collapsed `> [!figure]-` callout at width 400.
+- **Placement by topic, not time**, needs the time in the caption:
+  「（講者於 MM:SS 展示）」.
+- `# 逐投影片筆記` becomes a ==text-only index==: one line per frame in time order,
+  `- sN \`MM:SS\` title → 總整理〈subsection〉` (or `→ 同 sM`, `→ 未收（reason）`).
+  No embeds outside 總整理.
 
 ## Note structure template {#structure}
 

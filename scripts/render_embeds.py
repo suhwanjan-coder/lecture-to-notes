@@ -6,6 +6,8 @@ this script handles all the mechanical formatting it used to carry.
 The subagent writes a placeholder on its own line:
     [[EMBED s12]]
     [[EMBED s12: decision_support]]      # optional semantic intent (density control)
+    [[EMBED- s12: section divider]]      # folded: collapsed callout, width 400
+                                         # (repeated slides, chapter pages)
 
 This script, using slides_final.json, expands each to a col-0 callout with the
 correct attachment path + width + caption, and AUDITS:
@@ -29,6 +31,7 @@ Usage:
     python render_embeds.py <lecture_dir> [--note note_draft.md]
                             [--slug <attach_slug>] [--attach-root PATTERN]
                             [--attach-dir DIR] [--in-place] [--dry-run]
+                            [--no-tier-tag]
 """
 import argparse, json, os, re, sys
 
@@ -42,7 +45,9 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 from _common import load_config, parse_tier  # noqa: E402
 
-PLACEHOLDER = re.compile(r"\[\[EMBED\s+s(\d+)(?:\s*:\s*([^\]]+?))?\s*\]\]")
+PLACEHOLDER = re.compile(r"\[\[EMBED(-?)\s+s(\d+)(?:\s*:\s*([^\]]+?))?\s*\]\]")
+FOLDED_WIDTH = 400
+TIER_TAG = True  # --no-tier-tag: reader-facing notes need no "(T2)" suffix
 DEFAULT_ATTACH_ROOT = "99Attachment/lecture_{slug}"
 
 
@@ -142,14 +147,15 @@ def split_caption(cap):
     return short, rest
 
 
-def callout(attach_root, s, intent, missing_names):
+def callout(attach_root, s, intent, missing_names, folded=False):
     name = attachment_name(s, missing_names)
-    width = s.get("embed_width") or 700
+    width = FOLDED_WIDTH if folded else (s.get("embed_width") or 700)
     cap = (intent or s.get("section_suggestion")
            or (s.get("retrieval") or {}).get("summary_sentence") or "figure")
     short, rest = split_caption(cap)
     second = f"> {rest}\n" if rest else ""
-    return (f"> [!figure] s{int(s['slide_id'])} — {short} (T{tier_of(s)})\n"
+    tag = f" (T{tier_of(s)})" if TIER_TAG else ""
+    return (f"> [!figure]{'-' if folded else ''} s{int(s['slide_id'])} — {short}{tag}\n"
             f"{second}"
             f"> ![[{attach_root}/{name}|{width}]]")
 
@@ -192,8 +198,12 @@ def main():
                          "embedded filename is checked to exist there")
     ap.add_argument("--in-place", action="store_true", help="overwrite the note (else writes .rendered.md)")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--no-tier-tag", action="store_true",
+                    help='omit the "(T1)/(T2)" suffix on figure titles')
     args = ap.parse_args()
 
+    global TIER_TAG
+    TIER_TAG = not args.no_tier_tag
     lec = os.path.abspath(args.lecture_dir)
     slug = args.slug or os.path.basename(lec)
     attach_root = resolve_attach_root(args.attach_root, lec).replace("{slug}", slug)
@@ -224,7 +234,8 @@ def main():
             continue
         only = PLACEHOLDER.fullmatch(line.strip())
         if only:  # placeholder on its own line -> clean col-0 callout
-            sid, intent = int(only.group(1)), (only.group(2) or "").strip()
+            folded = bool(only.group(1))
+            sid, intent = int(only.group(2)), (only.group(3) or "").strip()
             s = by_id.get(sid)
             if s is None:
                 removed.append((sid, "unknown_slide")); continue
@@ -232,13 +243,13 @@ def main():
                 removed.append((sid, f"tier{tier_of(s)}/suppressed")); continue
             if out and out[-1].strip() != "":
                 out.append("")
-            out.append(callout(attach_root, s, intent, missing_names))
+            out.append(callout(attach_root, s, intent, missing_names, folded))
             out.append("")
             referenced.add(sid)
         else:  # inline placeholder -> ref marker in place, callout after the line
             queued = []
             def repl(m):
-                sid = int(m.group(1)); intent = (m.group(2) or "").strip()
+                sid = int(m.group(2)); intent = (m.group(3) or "").strip()
                 s = by_id.get(sid)
                 if s is None or tier_of(s) > 2 or s.get("embed_suppressed_reason"):
                     removed.append((sid, "inline_bad_tier")); return ""

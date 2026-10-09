@@ -36,6 +36,18 @@ first frame showed the opening speaker's title slide; the main speaker started
 at 07:42.) A recording with two speakers gets both, with time ranges, in the
 note header and frontmatter.
 
+## Layout — decide before `--tier`
+
+While checking the speaker, look at a handful of frames and set `"layout"` in
+`lecture.json` (note-spec "Optional layout: all-slides"):
+
+- designed slide deck → `"all-slides"`: every slide goes into 總整理.
+- screen share / live demo (browser, terminal, app windows) → leave it `"tiered"`.
+
+Say which one you chose, and why, in the run report. 阿志's ruling (2026-10-09):
+slides are never filtered by importance score; demos keep the tiered layout
+because near-identical captures do not help the reader.
+
 ## Pass 1 — Write
 
 ```
@@ -62,14 +74,26 @@ Inputs in `<dir>`:
 - Tier summary: Tier 1 = <ids>. Tier 2 = <ids>. Text-heavy evidence tables that
   are Tier 3 (<ids>) → reproduce as markdown tables; view the frame when OCR is garbled.
 
+Layout <tiered | all-slides>:
+- tiered: Tier 1 once in 總整理 + once in 逐投影片, Tier 2 逐投影片 only.
+- all-slides: follow note-spec "Optional layout: all-slides" literally — every
+  slide once in 總整理 where discussed (minor ones: caption + ≤ 1 sentence);
+  near-duplicates grouped in the caption; repeated slides and section dividers
+  as `[[EMBED- sN: …]]` (folded); no-slide frames left out with a reason;
+  逐投影片 = text-only index of every frame.
+Both layouts: end every 總整理 subsection with
+`> [!tip] 〔整理者補充〕對主任秘書的用處` + one `>` line — a concrete use for a
+hospital chief secretary drawn only from the note's own content; no new facts,
+never phrased as the speaker's view.
+
 Hard requirements: template structure exactly; `[[EMBED sN: short caption]]`
-placeholders only (no paths/widths); Tier 1 once in 總整理 + once in 逐投影片,
-Tier 2 逐投影片 only; 🗣️ for speaker-only content; exact numbers, ==highlight==
+placeholders only (no paths/widths); 🗣️ for speaker-only content; exact numbers, ==highlight==
 cut-offs; nothing silently dropped (B4); Resource = only sources named; Taiwan
 terminology; never invent names, venues or numbers.
 
-Acceptance: required headings present; every Tier-1/2 id placed as specified,
-zero Tier-3 ids; ≥ <8–10> 🗣️; tables have separator rows; payload ≥ 25% of
+Acceptance: required headings present; every embeddable id placed as the
+layout specifies (tiered: zero Tier-3 ids; all-slides: every frame embedded,
+grouped or left out with a reason); one 〔整理者補充〕 per 總整理 subsection; ≥ <8–10> 🗣️; tables have separator rows; payload ≥ 25% of
 transcript chars.
 
 Report (≤ 25 lines): file + line count; ids placed and viewed; suspects and audit
