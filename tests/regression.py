@@ -55,7 +55,10 @@ def snapshot(fx: Path):
         final = json.loads((work / "slides_final.json").read_text(encoding="utf-8"))
     out = {}
     for s in final:
-        ts = s["transcript_signals"]
+        ts = s.get("transcript_signals")
+        if ts is None:  # not grounded (e.g. VLM failed) — tier is all we can pin
+            out[str(s["slide_id"])] = {"tier": int(s["tier"])}
+            continue
         out[str(s["slide_id"])] = {
             "ref": round(ts["speaker_reference_density"], 4),
             "skip": round(ts["speaker_skip_score"], 4),
@@ -73,7 +76,9 @@ def diff(expected, got):
             msgs.append(f"  slide {sid}: {'missing' if g is None else 'new'}")
             continue
         for k in ("ref", "skip", "emph"):
-            if abs(e[k] - g[k]) > TOL:
+            if (k in e) != (k in g):
+                msgs.append(f"  slide {sid}: {k} {'gone' if k in e else 'appeared'}")
+            elif k in e and abs(e[k] - g[k]) > TOL:
                 msgs.append(f"  slide {sid}: {k} {e[k]} -> {g[k]}")
         if e["tier"] != g["tier"]:
             msgs.append(f"  slide {sid}: TIER {e['tier']} -> {g['tier']}")
