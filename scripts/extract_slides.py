@@ -193,8 +193,30 @@ def hamming(h1, h2):
     return sum(c1 != c2 for c1, c2 in zip(h1, h2))
 
 
+def small_gray(img_path, size=(320, 180)):
+    """Whole frame, grayscale, box-downscaled — input for changed_fraction."""
+    import numpy as np
+    from PIL import Image
+    with Image.open(img_path) as img:
+        return np.asarray(img.convert("L").resize(size, Image.BOX), dtype=np.int16)
+
+
+def changed_fraction(a, b, pixel_delta=24):
+    """Share of pixels whose gray level moved more than ``pixel_delta``.
+
+    The 32x32 average hash cannot see a slide change in screen-captured
+    webinars: browser chrome, a banner and a live speaker panel fill most of
+    the frame, and two white text slides average to nearly the same bits
+    (Trajenta 2025-04-12: distinct slides 12 bits apart, threshold 40). At
+    320x180 a new slide still moves ~8%+ of the pixels while a talking
+    speaker moves <4% (calibrated 2026-10-16 on Trajenta and a Pfizer
+    webinar, see reference/decisions.md).
+    """
+    return float((abs(a - b) > pixel_delta).mean())
+
+
 def dedup_frames(frame_files, slides_dir, interval, threshold=40,
-                 drift_threshold=None):
+                 drift_threshold=None, change_threshold=0.06):
     """Group consecutive similar frames, keep the last of each group.
 
     Two thresholds, not one. ``threshold`` is the step test (frame i vs the
@@ -206,16 +228,24 @@ def dedup_frames(frame_files, slides_dir, interval, threshold=40,
     instead of one. Default is 2x the step threshold, which leaves ordinary
     static-slide grouping untouched (those frames sit far below the step
     threshold anyway) and only bites on genuine drift.
+
+    ``change_threshold`` is a third, hash-independent step test: the frame
+    also starts a new slide when more than this share of its pixels changed
+    from the previous member (see changed_fraction). 0 disables it.
     """
     if drift_threshold is None:
         drift_threshold = threshold * 2
     hashes = [phash_cropped(os.path.join(slides_dir, f)) for f in frame_files]
+    grays = ([small_gray(os.path.join(slides_dir, f)) for f in frame_files]
+             if change_threshold else None)
 
     groups = []
     current_group = [0]
     for i in range(1, len(hashes)):
         step_ok = hamming(hashes[current_group[-1]], hashes[i]) < threshold
         drift_ok = hamming(hashes[current_group[0]], hashes[i]) < drift_threshold
+        if step_ok and drift_ok and grays is not None:
+            step_ok = changed_fraction(grays[current_group[-1]], grays[i]) <= change_threshold
         if step_ok and drift_ok:
             current_group.append(i)
         else:
@@ -254,6 +284,11 @@ def main():
                         help="Hamming distance from a group's FIRST frame that splits "
                              "the group; bounds chained drift on animated builds "
                              "(default: 2x --hash-threshold)")
+    parser.add_argument("--change-threshold", type=float, default=0.06,
+                        help="Share of pixels (320x180 gray) that must change between "
+                             "consecutive frames to force a new slide even when the "
+                             "hashes match; catches webinar captures (default: 0.06, "
+                             "0 disables)")
     parser.add_argument("--ffmpeg-timeout", type=int, default=600,
                         help="Seconds to allow ffmpeg frame extraction (default: 600)")
     args = parser.parse_args()
@@ -300,7 +335,8 @@ def main():
 
     # Step 2: Deduplicate
     unique_slides = dedup_frames(frame_files, slides_dir, args.interval,
-                                 args.hash_threshold, args.group_drift_threshold)
+                                 args.hash_threshold, args.group_drift_threshold,
+                                 args.change_threshold)
     print(f"Deduplicated: {len(frame_files)} frames → {len(unique_slides)} unique slides")
 
     # Step 3: Save metadata

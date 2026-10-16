@@ -502,3 +502,34 @@ The recurring meta-lesson across the entries above, stated once:
    as "nothing wrong". When a comparison can come up empty, the empty case needs
    its own branch; falling through to the success path is how a checker becomes
    decorative.
+
+## Frame dedup in webinar captures {#webinar-frame-dedup}
+
+**2026-10-16, Trajenta 2025-04-12 (SpotMe browser capture, slide beside a large
+speaker panel).**
+
+Stage A grouped 15-s frames by a 32x32 average hash of the centre crop
+(step < 40 of 1024 bits). In a browser-captured webinar the crop is mostly
+banner, chrome and speaker video; two white text slides average to almost the
+same bits. Distinct consecutive slides measured **12, 23, 29 and 36 bits** apart,
+so `06:00–09:45` (16 frames) and `11:00–13:45` (12 frames) each collapsed into
+one slide, and the writers had to re-watch the video ("影片補看"). Stage C
+(`dedup_semantic.py`) dropped nothing: 60 → 60 and 95 → 95.
+
+Fix: a second step test, `changed_fraction` — the share of pixels whose gray
+level moved > 24 on the whole frame box-scaled to 320x180. A frame with more
+than **0.06** changed starts a new slide even when the hashes match.
+
+| Sample | changed_fraction |
+|---|---|
+| Pfizer webinar 2026-04-01, same slide, 58 pairs | max 0.037 |
+| Pfizer webinar, slide change, 27 pairs | min 0.119 |
+| Trajenta talk, consecutive kept slides (incl. the 12- and 29-bit pairs) | min 0.079 |
+| Trajenta Q&A, camera-only scenes | 0.046–0.075 (splitting these is harmless) |
+
+On the Pfizer webinar (hand-labelled, 86 frames → 28 slides) old and new rules
+give identical boundaries; on Trajenta's 40 kept talk slides the old rule
+re-merges two pairs, the new rule none. Not measured: the slides actually lost
+inside the long Trajenta groups (videos deleted). A live-panel mask (pixels that
+change in most frame pairs) was tried and found nothing to mask at these
+thresholds, so it was left out. `--change-threshold 0` restores the old rule.
