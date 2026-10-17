@@ -8,7 +8,10 @@ What it does, in order:
   4. ==x== -> <mark>x</mark>
   5. Obsidian callouts (`> [!type] title` + `>` body lines) -> <div class="co type">
   6. tabs -> 4 spaces, then pandoc (gfm -> standalone html5) with embedded CSS
-     (Microsoft JhengHei stack, light theme, readable tables, max-width 900px)
+     (Microsoft JhengHei stack, light theme, readable tables, max-width 1200px)
+  7. images fill the column, except explicit widths <=400px; click (or Enter)
+     opens a scrollable full-viewport overlay at native resolution; click/Esc closes
+     (inline CSS/JS only, including when opened offline via file://)
 
 Image lookup for `![[path|w]]`: <attach-base>/<path> first (default: the note's
 folder), then <vault>/<path> (e.g. a `99-Attachment/...` path against the vault
@@ -31,7 +34,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-CSS = """body{font-family:'Microsoft JhengHei','Noto Sans TC','PingFang TC',sans-serif;max-width:900px;margin:30px auto;padding:0 20px;line-height:1.7;color:#222;background:#fff}
+CSS = """body{font-family:'Microsoft JhengHei','Noto Sans TC','PingFang TC',sans-serif;max-width:1200px;margin:30px auto;padding:0 20px;line-height:1.7;color:#222;background:#fff}
 h1{border-bottom:2px solid #444;padding-bottom:4px}h2{border-bottom:1px solid #ccc;margin-top:1.6em}
 table{border-collapse:collapse;margin:10px 0;font-size:.92em}td,th{border:1px solid #bbb;padding:4px 8px;vertical-align:top}th{background:#f0f0f0}
 mark{background:#fff3a0}code{background:#eee;padding:0 4px;border-radius:3px}
@@ -39,7 +42,58 @@ mark{background:#fff3a0}code{background:#eee;padding:0 4px;border-radius:3px}
 .co.summary{border-color:#2a7;background:#eefaf3}.co.figure{border-color:#58c;background:#eef3fb}
 .co.warning,.co.caution{border-color:#c80;background:#fff6e6}.co.danger,.co.bug{border-color:#c33;background:#fdeeee}
 .ct{font-weight:bold;margin-bottom:4px}
-img{max-width:100%;height:auto}"""
+img{max-width:100%;height:auto}
+.slide-image{box-sizing:border-box;cursor:zoom-in}
+#image-overlay{position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.94);overflow:auto;cursor:zoom-out}
+#image-overlay[hidden]{display:none}
+#image-overlay img{display:block;max-width:none;max-height:none;width:auto;height:auto;margin:0 auto}
+#image-overlay button{position:fixed;right:16px;top:12px;z-index:10001;font-size:18px;padding:8px 12px;cursor:pointer}
+@media print{#image-overlay{display:none!important}}"""
+
+JS = """document.addEventListener('DOMContentLoaded', () => {
+  const overlay = document.createElement('div');
+  overlay.id = 'image-overlay';
+  overlay.hidden = true;
+  overlay.tabIndex = -1;
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', '原尺寸圖片（點擊或 Esc 關閉）');
+  const closeButton = document.createElement('button');
+  closeButton.textContent = '關閉 (Esc)';
+  const full = document.createElement('img');
+  overlay.append(closeButton, full);
+  document.body.append(overlay);
+  let opener, previousOverflow;
+  function close() {
+    if (overlay.hidden) return;
+    overlay.hidden = true;
+    full.removeAttribute('src');
+    document.body.style.overflow = previousOverflow;
+    if (opener) opener.focus({preventScroll: true});
+  }
+  function open(img) {
+    opener = img;
+    previousOverflow = document.body.style.overflow;
+    full.src = img.src;
+    full.alt = img.alt;
+    overlay.hidden = false;
+    overlay.scrollTop = overlay.scrollLeft = 0;
+    document.body.style.overflow = 'hidden';
+    closeButton.focus({preventScroll: true});
+  }
+  document.querySelectorAll('.slide-image').forEach(img => {
+    img.addEventListener('click', () => open(img));
+    img.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(img); }
+    });
+  });
+  overlay.addEventListener('click', close);
+  document.addEventListener('keydown', e => {
+    if (overlay.hidden) return;
+    if (e.key === 'Escape') close();
+    if (e.key === 'Tab') { e.preventDefault(); closeButton.focus(); }
+  });
+});"""
 
 IMG_RE = re.compile(r"!\[\[([^\]|]+)\|?(\d+)?\]\]")
 CALLOUT_RE = re.compile(r"^> \[!(\w+)\]([+-]?)\s*(.*)$")
@@ -71,7 +125,10 @@ def convert(text, bases):
         with open(p, "rb") as fh:
             b64 = base64.b64encode(fh.read()).decode()
         inlined[0] += 1
-        return (f'<img src="data:{mime};base64,{b64}" style="max-width:{width}px;width:100%;'
+        display_width = f"{width}px" if int(width) <= 400 else "100%"
+        return (f'<img class="slide-image" tabindex="0" role="button" '
+                f'alt="{html.escape(path, quote=True)}" title="點擊查看原尺寸" '
+                f'src="data:{mime};base64,{b64}" style="width:{display_width};'
                 f'border:1px solid #ccc;border-radius:4px;display:block;margin:6px 0">')
 
     text = IMG_RE.sub(img, text)
@@ -144,7 +201,7 @@ def main():
     with open(md_path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(md)
     with open(css_path, "w", encoding="utf-8") as fh:
-        fh.write(f"<style>{CSS}</style>\n")
+        fh.write(f"<style>{CSS}</style>\n<script>{JS}</script>\n")
     cmd = ["pandoc", md_path, "-f", "gfm", "-t", "html5", "-s",
            "--metadata", f"pagetitle={title}", "-H", css_path, "-o", out_path]
     try:
