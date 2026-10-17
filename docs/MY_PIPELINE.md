@@ -44,6 +44,8 @@ python scripts/run_lecture.py <輸出資料夾> --finish
 
 確認講者時，順便看畫面決定版面，寫進 `lecture.json` 的 `layout`，再跑 `--tier`：
 
+同時執行 `scripts/crop_slide_region.py sheet <講座資料夾>` 並看總覽，在 `lecture.json` 加入 `slide_crop`（例如 `[{"slides":"1-100","box":[34,180,1433,645]}]`，框為原圖的 x、y、寬、高）。每種版面一條規則；遇全螢幕影片或其他版面就拆開範圍、跳過那些頁，再執行 `scripts/crop_slide_region.py verify <講座資料夾>` 並看裁切結果。頁碼用圖上與筆記相同的 `sNN`，不是影格檔名或附件尾碼；未填或 `[]` 就不裁切。資料夾可指向含 `lecture.json` 的 prepare 輸出，或其含 `_out` 的上層；預覽預設存於傳入資料夾的 `_out/crop_sheet.jpg`、`_out/crop_verify.jpg`，可用 `--out` 指定。
+
 | 講座類型 | `layout` | 總整理的圖 | 逐投影片筆記 |
 |---|---|---|---|
 | 投影片講座 | `all-slides` | 每張投影片都放在講到它的段落；不重要的一行帶過；重複圖與章節頁預設收合、縮小 | 純文字索引（時間 → 所在小節） |

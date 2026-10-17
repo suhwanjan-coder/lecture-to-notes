@@ -273,6 +273,9 @@ def copy_cited_frames(lec: Path, info, r):
                 shutil.copy2(lec / "slides" / s["filename"], d / s["attachment_name"])
             n += 1
     r.say(f"copied {n} cited frames -> {', '.join(str(d) for d in dests)}")
+    if info.get("slide_crop"):
+        r.sh("crop_slides (local)", [PY, script("crop_slide_region.py"), "apply",
+                                   dests[1], "--lecture", lec])
 
 
 # ------------------------------------------------------------------- finish --
@@ -302,6 +305,11 @@ def finish(a):
         if a.force:
             args.append("--force")
         r.sh("finalize_to_vault", args)
+        if info.get("slide_crop"):
+            attach_dir = ((cfg.get("paths") or {}).get("vault_attach_dir") or "").strip() or "99Attachment"
+            r.sh("crop_slides (vault)", [PY, script("crop_slide_region.py"), "apply",
+                                       vault / attach_dir / f"lecture_{info['slug']}",
+                                       "--lecture", lec])
 
     html_args = [PY, script("note_to_html.py"), final, "--out", final.with_suffix(".html"),
                  "--attach-base", lec]

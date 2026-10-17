@@ -15,6 +15,7 @@ This fork carries 阿志's local default flow. When asked to process a lecture
    filling `lecture.json` — never from the first frame. In the same step set
    `"layout"`: `"all-slides"` for slide decks, `"tiered"` for screen-share demos
    (`reference/stage-f-prompts.md` "Layout").
+   Also run `scripts/crop_slide_region.py sheet <lecture_dir>`, inspect it, write `slide_crop` in `lecture.json` using note slide numbers and one box per layout (split ranges to skip full-screen video/other layouts), then run `verify <lecture_dir>` and inspect the crops (see `docs/MY_PIPELINE.md`).
 5. Run every script with `.venv\Scripts\python.exe` (system Python lacks OCR).
    After `--finish`, tidy `D:\lectures\<lecture>\`: root keeps what 阿志 opens
    (video, HTML, viewer), everything else goes to `_archive\`.
