@@ -21,10 +21,10 @@
 指令：
 
 ```
-python scripts/run_lecture.py <影片或網址> --out <輸出資料夾> --lang zh [--no-groq]
-python scripts/run_lecture.py <輸出資料夾> --tier
-python scripts/run_lecture.py <輸出資料夾> --render
-python scripts/run_lecture.py <輸出資料夾> --finish
+.venv\Scripts\python.exe scripts\run_lecture.py <影片或網址> --out <輸出資料夾> --lang zh [--no-groq]
+.venv\Scripts\python.exe scripts\run_lecture.py <輸出資料夾> --tier
+.venv\Scripts\python.exe scripts\run_lecture.py <輸出資料夾> --render
+.venv\Scripts\python.exe scripts\run_lecture.py <輸出資料夾> --finish
 ```
 
 | 指令 | 做完之後 |
@@ -38,13 +38,13 @@ python scripts/run_lecture.py <輸出資料夾> --finish
 
 端到端測試（2026-10-07）：CDC 公開演講的 2 分鐘 YouTube 片段，從下載到可寫筆記約 2.5 分鐘，四個指令都 exit 0。
 
-一律用 repo 的 `.venv\Scripts\python.exe` 執行（系統 Python 沒有 OCR 套件，會在轉錄跑完一小時後才在 OCR 停住）。
+一律用 repo 的 `.venv\Scripts\python.exe` 執行（系統 Python 沒有 OCR／轉錄套件）。2026-10-20 起 runner 開頭就檢查必要套件，缺了立刻停下並列出缺哪些、該用哪個 python；以前會在轉錄跑完一小時後才在 OCR 停住。
 
 ## 筆記版面（2026-10-09 定案）
 
 確認講者時，順便看畫面決定版面，寫進 `lecture.json` 的 `layout`，再跑 `--tier`：
 
-同時執行 `scripts/crop_slide_region.py sheet <講座資料夾>` 並看總覽，在 `lecture.json` 加入 `slide_crop`（例如 `[{"slides":"1-100","box":[34,180,1433,645]}]`，框為原圖的 x、y、寬、高）。每種版面一條規則；遇全螢幕影片或其他版面就拆開範圍、跳過那些頁，再執行 `scripts/crop_slide_region.py verify <講座資料夾>` 並看裁切結果。頁碼用圖上與筆記相同的 `sNN`，不是影格檔名或附件尾碼；未填或 `[]` 就不裁切。資料夾可指向含 `lecture.json` 的 prepare 輸出，或其含 `_out` 的上層；預覽預設存於傳入資料夾的 `_out/crop_sheet.jpg`、`_out/crop_verify.jpg`，可用 `--out` 指定。
+同時執行 `.venv\Scripts\python.exe scripts\crop_slide_region.py sheet <講座資料夾>` 並看總覽，在 `lecture.json` 加入 `slide_crop`（例如 `[{"slides":"1-100","box":[34,180,1433,645]}]`，框為原圖的 x、y、寬、高）。每種版面一條規則；遇全螢幕影片或其他版面就拆開範圍、跳過那些頁，再執行 `.venv\Scripts\python.exe scripts\crop_slide_region.py verify <講座資料夾>` 並看裁切結果。頁碼用圖上與筆記相同的 `sNN`，不是影格檔名或附件尾碼；未填或 `[]` 就不裁切。資料夾可指向含 `lecture.json` 的 prepare 輸出，或其含 `_out` 的上層；預覽預設存於傳入資料夾的 `_out/crop_sheet.jpg`、`_out/crop_verify.jpg`，可用 `--out` 指定。
 
 | 講座類型 | `layout` | 總整理的圖 | 逐投影片筆記 |
 |---|---|---|---|

@@ -47,6 +47,30 @@ except Exception:
     pass
 
 HERE = Path(__file__).resolve().parent
+
+# Fail at second 0, not after an hour of transcription: system Python lacks
+# the OCR / ASR packages and used to die in quick_ocr only after Whisper ran.
+REQUIRED_MODULES = {  # import name -> pip package
+    "faster_whisper": "faster-whisper", "rapidocr_onnxruntime": "rapidocr_onnxruntime",
+    "numpy": "numpy", "PIL": "pillow", "cv2": "opencv-python", "yaml": "pyyaml",
+    "rapidfuzz": "rapidfuzz", "json_repair": "json-repair", "requests": "requests",
+    "yt_dlp": "yt-dlp",
+}
+
+
+def _require_modules():
+    import importlib.util
+    missing = [pkg for mod, pkg in REQUIRED_MODULES.items()
+               if importlib.util.find_spec(mod) is None]
+    if not missing:
+        return
+    venv_py = HERE.parent / ".venv" / "Scripts" / "python.exe"
+    sys.exit(f"ERROR: this Python ({sys.executable}) is missing: {', '.join(missing)}\n"
+             f"Run with the repo venv instead:\n"
+             f"  {venv_py} {Path(__file__).resolve()} ...")
+
+
+_require_modules()
 sys.path.insert(0, str(HERE))
 from _common import load_config, parse_tier  # noqa: E402
 
