@@ -11,7 +11,7 @@
 | 步驟 | 做什麼 | 工具 | 誰做 |
 |---|---|---|---|
 | 0 取得素材 | 網址用 yt-dlp 下載 mp4，有字幕一併下載；本機檔直接用 | `scripts/fetch_media.py` | 腳本 |
-| 1 轉錄（主） | 本機 CPU Whisper medium，資料不離開本機 | `scripts/transcribe_video.py --device cpu --model medium` | 腳本 |
+| 1 轉錄（主） | 本機 CPU Breeze-ASR-25（2026-10-22 起；之前是 Whisper medium），資料不離開本機 | `scripts/transcribe_video.py --device cpu --model breeze25` | 腳本 |
 | 2 轉錄稽核（外部） | Groq 再轉一次，只拿來比對，不取代主稿；列出崩壞段、漏段、數字不一致 | `scripts/asr_audit.py` | 腳本 |
 | 3 投影片 | 擷取畫面、OCR、去重、VLM 語意、逐字稿對位 | 既有 Stage A–E | 腳本 |
 | 4 分級 | 依 note-spec 計分規則決定每張投影片要不要放；投影片講座改用 all-slides 版面，全部放 | `scripts/tier_pass.py` | 腳本 |
@@ -59,6 +59,7 @@
 
 ## 預設值與理由
 
+- **主轉錄用 Breeze-ASR-25（2026-10-22 阿志裁示）。** 三場同條件雙胞胎筆記盲評，Breeze 版勝 2 平 1，最終筆記錯字與語意錯誤 3 處對 medium 的 6 處；代價是轉錄時間約 1.6 倍（每小時錄音約 50 分鐘）。模型在 `config.yaml` 的 `paths.whisper_model_dir`（目前指向 asr-benchmark 的 models 資料夾）；要退回舊引擎就加 `--whisper-model medium`。報告：asr-benchmark `reports/asr-note-level-pilot-2026-10-22.md`。
 - **CPU 為主，Groq 為稽核。** 實測 CPU 兩場都完整；Groq 快 30 倍，但 40 分鐘那場整段崩壞，且輸出簡體。Groq 只用來抓主稿的錯，`--no-groq` 可關閉（有病人資料或內部會議時必關，因為音檔會上傳）。
 - **稽核看三件事。** 某段只有一邊有文字（漏段）、某段文字一直重複（崩壞）、同一段兩邊的數字不同。數字不同最重要，因為筆記的價值在數字。
 - **講者身分以介紹段為準。** 論壇錄影開頭常是別人致詞；以主持人介紹與主講標題頁判定，不看第一張畫面。

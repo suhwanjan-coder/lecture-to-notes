@@ -5,7 +5,7 @@ unless --force):
 
     # 1. prepare: media -> everything Stage F needs, then stop
     python run_lecture.py <video|audio|youtube-url> --out <lecture_dir> --lang zh
-        [--no-groq] [--no-vlm] [--vlm-model minicpm-v:8b] [--whisper-model medium]
+        [--no-groq] [--no-vlm] [--vlm-model minicpm-v:8b] [--whisper-model breeze25]
 
     # (Claude Stage F pass 1 writes note_draft.md — reference/stage-f-prompts.md)
 
@@ -360,7 +360,7 @@ def main():
     ap.add_argument("input", help="media path / URL (prepare) or lecture dir (other modes)")
     ap.add_argument("--out", help="lecture dir to create (prepare mode)")
     ap.add_argument("--lang", default="zh", choices=["zh", "en", "bilingual"])
-    ap.add_argument("--whisper-model", default="medium")
+    ap.add_argument("--whisper-model", default="breeze25")  # 2026-10-22: blind note-level pilot, asr-benchmark/reports
     ap.add_argument("--section", default=None,
                     help="URL only: download just START-END (e.g. 600-720) — for tests")
     ap.add_argument("--vlm-model", default="minicpm-v:8b")
