@@ -18,7 +18,12 @@ This fork carries 阿志's local default flow. When asked to process a lecture
    Also run `scripts/crop_slide_region.py sheet <lecture_dir>`, inspect it, write `slide_crop` in `lecture.json` using note slide numbers and one box per layout (split ranges to skip full-screen video/other layouts), then run `verify <lecture_dir>` and inspect the crops (see `docs/MY_PIPELINE.md`).
 5. Run every script with `.venv\Scripts\python.exe` (system Python lacks OCR).
    After `--finish`, tidy `D:\lectures\<lecture>\`: root keeps what 阿志 opens
-   (video, HTML, viewer), everything else goes to `_archive\`.
+   (video, HTML, Word, viewer), everything else goes to `_archive\`.
+6. Deliverables are always TWO files (阿志 2026-10-25): the single-file HTML and a
+   Word `.docx`. `--finish` makes both (pandoc converts the HTML); if it reports
+   `docx: SKIPPED`, fix pandoc and convert before calling the lecture done. When
+   阿志 names a destination folder (e.g. a course week's `1_課堂內容\`), put both
+   files there under the same name.
 
 `SKILL.md` and `reference/` remain the upstream, tool-agnostic spec; local
 changes extend them and never contradict them.

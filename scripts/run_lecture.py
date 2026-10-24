@@ -14,7 +14,7 @@ unless --force):
 
     # (Claude passes 2-4: verify, Resource, L3 segments)
 
-    # 3. finish: final note -> vault + single-file HTML
+    # 3. finish: final note -> vault + single-file HTML + Word (.docx)
     python run_lecture.py <lecture_dir> --finish [--viewer]
 
 The web viewer (video + transcript + L3 segments) is OPTIONAL — only on request:
@@ -340,6 +340,26 @@ def finish(a):
     if vault:
         html_args += ["--vault", vault]
     r.sh("note_to_html", html_args)
+
+    # Word copy (阿志 2026-10-25: every lecture ships HTML + Word). Converted from the
+    # HTML, which already has every figure inlined. lecture.json keeps the mtime of
+    # the .docx we wrote; a different mtime means someone edited it by hand — never
+    # overwrite that, write a sibling instead.
+    pandoc = shutil.which("pandoc") or str(Path(os.environ.get("LOCALAPPDATA", ""))
+                                           / "Pandoc" / "pandoc.exe")
+    docx = final.with_suffix(".docx")
+    if docx.exists() and abs(docx.stat().st_mtime - info.get("docx_mtime", 0)) > 1:
+        docx = final.with_name(final.stem + "_重新轉檔.docx")
+        r.say(f"docx: existing Word file was changed after our last conversion — writing {docx.name}")
+    if Path(pandoc).is_file():
+        r.sh("html_to_docx (pandoc)", [pandoc, final.with_suffix(".html"), "-f", "html",
+                                       "-t", "docx", "-o", docx])
+        if docx == final.with_suffix(".docx"):
+            saved = lecture_json(lec)
+            saved["docx_mtime"] = docx.stat().st_mtime
+            save_lecture_json(lec, saved)
+    else:
+        r.say("docx: SKIPPED — pandoc not found (winget install JohnMacFarlane.Pandoc)")
 
     if a.viewer:
         plan = lec / "seg_plan.json"

@@ -16,7 +16,7 @@
 | 3 投影片 | 擷取畫面、OCR、去重、VLM 語意、逐字稿對位 | 既有 Stage A–E | 腳本 |
 | 4 分級 | 依 note-spec 計分規則決定每張投影片要不要放；投影片講座改用 all-slides 版面，全部放 | `scripts/tier_pass.py` | 腳本 |
 | 5 寫筆記 | 寫筆記 → 獨立查核（文獻補齊、分段整理稿只在要求時做） | `reference/stage-f-prompts.md` | Claude |
-| 6 收尾 | 寫入 vault、單檔 HTML；Web viewer 只在要求時做 | `scripts/run_lecture.py --finish [--viewer]` | 腳本 |
+| 6 收尾 | 寫入 vault、單檔 HTML、Word 檔；Web viewer 只在要求時做 | `scripts/run_lecture.py --finish [--viewer]` | 腳本 |
 
 指令：
 
@@ -32,7 +32,7 @@
 | 第一行（準備） | 停在「READY FOR STAGE F」。確認講者後，把講者、主題、日期填進 `lecture.json` |
 | `--tier` | 產出 `slides_final.json`，交給 Claude 寫筆記（第 1 輪） |
 | `--render` | 產出正式筆記檔並稽核，交給 Claude 獨立查核（第 2 輪） |
-| `--finish` | 寫入 vault、產出單檔 HTML。加 `--viewer` 才做 Web viewer |
+| `--finish` | 寫入 vault、產出單檔 HTML 與 Word 檔（兩份成品，阿志 2026-10-25 定案）。加 `--viewer` 才做 Web viewer |
 
 實際上只要在這個 repo 開 Claude Code，說「跑演講筆記 <影片路徑或網址>」，Claude 會照順序執行這四步與四輪寫作。資料夾輸入只會列出裡面的檔案，不會替你挑影片。
 
@@ -55,7 +55,9 @@
 
 ## 講座資料夾整理
 
-每場收尾後整理 `D:\lectures\<講座>\`：根目錄只留會打開的檔案（影片、HTML 筆記；有 Web viewer 時加上 viewer 與分享說明），其餘全部移進 `_archive\`。之後要補 Web viewer 或第 3 輪，對 `_archive\_out` 執行即可。筆記 md 的正本在 vault。
+每場收尾後整理 `D:\lectures\<講座>\`：根目錄只留會打開的檔案（影片、HTML 筆記、Word 筆記；有 Web viewer 時加上 viewer 與分享說明），其餘全部移進 `_archive\`。
+
+成品一律兩份：單檔 HTML（圖片內嵌）與 Word（.docx，由 pandoc 從 HTML 轉出，同檔名）。阿志指定放置資料夾時（例如課程週次的 `1_課堂內容\`），兩份一起放。Word 檔若比筆記新（表示阿志改過），`--finish` 不覆蓋，另存 `…_重新轉檔.docx`。之後要補 Web viewer 或第 3 輪，對 `_archive\_out` 執行即可。筆記 md 的正本在 vault。
 
 ## 預設值與理由
 
