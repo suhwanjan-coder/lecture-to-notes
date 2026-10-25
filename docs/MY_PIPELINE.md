@@ -22,6 +22,7 @@
 
 ```
 .venv\Scripts\python.exe scripts\run_lecture.py <影片或網址> --out <輸出資料夾> --lang zh [--no-groq]
+.venv\Scripts\python.exe scriptsun_lecture.py <純音檔> --out <輸出資料夾> --pdf <簡報.pdf> --lang zh [--no-groq] [--no-vlm]
 .venv\Scripts\python.exe scripts\run_lecture.py <輸出資料夾> --tier
 .venv\Scripts\python.exe scripts\run_lecture.py <輸出資料夾> --render
 .venv\Scripts\python.exe scripts\run_lecture.py <輸出資料夾> --finish
@@ -80,3 +81,7 @@
 | 圖說第一行太長 | `render_embeds.py` 自動把說明移到第二行 |
 | md 不好讀 | `scripts/note_to_html.py` 產出圖片內嵌的單檔 HTML |
 | PowerShell 紀錄檔變 UTF-16 亂碼 | 執行器一律用 Python 寫 UTF-8 紀錄 |
+
+## 純音檔＋PDF 簡報（--pdf）
+
+`prepare` 加 `--pdf` 時，PDF 每頁就是一張投影片（`scripts\pdf_deck.py`）：渲染成 `slides\page_NN.jpg`、寫 `pdf_text.json`，轉錄完成後依逐字稿與頁面文字做單調對齊，寫入每頁的真實起訖時間與 `pdf_align.json`。略過畫面擷取、OCR、去重。對齊是估計值，筆記不得把頁面時間當成精確換頁點。`--no-vlm` 會把 `slides_dedup.json` 複製成 `slides_vlm.json`，供 ground_slides 使用。檔名或文字含 `B*15:02` 這類等位基因寫法時，筆記裡要寫成 `B\*15:02`，否則 Markdown 轉 HTML 會把星號配成斜體、錯置標籤，導致 pandoc 轉 Word 失敗。

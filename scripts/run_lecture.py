@@ -6,6 +6,7 @@ unless --force):
     # 1. prepare: media -> everything Stage F needs, then stop
     python run_lecture.py <video|audio|youtube-url> --out <lecture_dir> --lang zh
         [--no-groq] [--no-vlm] [--vlm-model minicpm-v:8b] [--whisper-model breeze25]
+        [--pdf <deck.pdf>]    # audio-only recording + PDF deck instead of video frames
 
     # (Claude Stage F pass 1 writes note_draft.md — reference/stage-f-prompts.md)
 
@@ -200,15 +201,23 @@ def prepare(a):
                   "primary transcript alone")
 
     # 3. slides: Stage A-E
-    if not r.done("slides_raw.json"):
-        r.sh("extract_slides", [PY, script("extract_slides.py"), media, "--output-dir", lec])
-        r.sh("quick_ocr", [PY, script("quick_ocr.py"), lec])
-    if not r.done("slides_dedup.json"):
-        r.sh("dedup", [PY, script("dedup_semantic.py"), lec])
+    if a.pdf:
+        # audio + PDF deck (Path B): pages are the slides, timed against the transcript
+        if not r.done("slides_dedup.json", "pdf_align.json"):
+            r.sh("pdf_deck render", [PY, script("pdf_deck.py"), "render", a.pdf, lec])
+            r.sh("pdf_deck align", [PY, script("pdf_deck.py"), "align", lec])
+    else:
+        if not r.done("slides_raw.json"):
+            r.sh("extract_slides", [PY, script("extract_slides.py"), media, "--output-dir", lec])
+            r.sh("quick_ocr", [PY, script("quick_ocr.py"), lec])
+        if not r.done("slides_dedup.json"):
+            r.sh("dedup", [PY, script("dedup_semantic.py"), lec])
     if not r.done("slides_ocr.json"):
         r.sh("ocr_surya (falls back to RapidOCR)", [PY, script("ocr_surya.py"), lec, "--resume"])
     if a.no_vlm:
         r.say("vlm: skipped (--no-vlm) — tiers will fall back to conservative Tier 3")
+        if not r.done("slides_vlm.json"):  # ground_slides reads this file; no VLM fields in it
+            shutil.copy2(lec / "slides_dedup.json", lec / "slides_vlm.json")
     elif not r.done("slides_vlm.json"):
         r.sh("vlm_signals", [PY, script("vlm_signals.py"), lec, "--model", a.vlm_model,
                              "--inference-timeout", "600", "--resume"])
@@ -383,6 +392,8 @@ def main():
     ap.add_argument("--whisper-model", default="breeze25")  # 2026-10-22: blind note-level pilot, asr-benchmark/reports
     ap.add_argument("--section", default=None,
                     help="URL only: download just START-END (e.g. 600-720) — for tests")
+    ap.add_argument("--pdf", help="prepare: slide deck PDF for an audio-only recording "
+                                  "(pages become the slides, aligned to the transcript)")
     ap.add_argument("--vlm-model", default="minicpm-v:8b")
     ap.add_argument("--no-groq", action="store_true",
                     help="skip the Groq audit (required for patient data / internal meetings)")
@@ -408,6 +419,8 @@ def main():
             ap.error("prepare mode needs --out <lecture_dir>")
         if not URL_RE.match(a.input) and not Path(a.input).exists():
             ap.error(f"not found: {a.input}")
+        if a.pdf and not Path(a.pdf).is_file():
+            ap.error(f"not found: {a.pdf}")
         prepare(a)
 
 
