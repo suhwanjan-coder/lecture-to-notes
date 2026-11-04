@@ -95,7 +95,7 @@ JS = """document.addEventListener('DOMContentLoaded', () => {
   });
 });"""
 
-IMG_RE = re.compile(r"!\[\[([^\]|]+)\|?(\d+)?\]\]")
+IMG_RE = re.compile(r"!\[\[([^\]|]+)(?:\|([^\]]*))?\]\]")
 CALLOUT_RE = re.compile(r"^> \[!(\w+)\]([+-]?)\s*(.*)$")
 
 
@@ -116,7 +116,10 @@ def convert(text, bases):
     missing, inlined = [], [0]
 
     def img(m):
-        path, width = m.group(1), m.group(2) or "600"
+        path = m.group(1)
+        alias = (m.group(2) or "").strip()
+        # `|700` is a width; any other alias (`|說明`) is a caption, not a size
+        width = alias if alias.isdigit() else "600"
         p = find_image(path, bases)
         if not p:
             missing.append(path)

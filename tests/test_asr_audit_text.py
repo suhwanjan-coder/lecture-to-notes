@@ -53,12 +53,13 @@ def test_extract_numbers_arabic_and_chinese_forms_agree():
     assert a.extract_numbers("三萬") == a.extract_numbers("30000") == ["30000"]
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG-candidate: colloquial truncated numerals read as 102/30005 "
-    "(spoken 一百二=120, 三萬五=35000) -> false 'number mismatch' flags"))
-def test_extract_numbers_colloquial_truncated_numerals():
-    assert a.extract_numbers("一百二") == ["120"]
-    assert a.extract_numbers("三萬五") == ["35000"]
+@pytest.mark.parametrize("text,want", [
+    ("一百二", ["120"]), ("三萬五", ["35000"]), ("兩千三", ["2300"]),
+    ("一百零二", ["102"]),            # 零 keeps it literal
+    ("一百二十", ["120"]), ("三萬零五", ["30005"]),
+])
+def test_extract_numbers_colloquial_truncated_numerals(text, want):
+    assert a.extract_numbers(text) == want
 
 
 # ---- squash / jaccard / bigrams -------------------------------------------------------

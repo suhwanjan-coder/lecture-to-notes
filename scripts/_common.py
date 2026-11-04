@@ -12,6 +12,7 @@ wants `fmt_hms` does not pay for (or crash on) a missing OCR stack.
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -461,7 +462,9 @@ def parse_tier(val: Any, default: int = 3) -> int:
     if isinstance(val, bool):
         pass  # bools are ints in Python; treat as unparseable
     elif isinstance(val, (int, float)):
-        return int(val)
+        if math.isfinite(val):
+            return int(val)
+        # NaN / Infinity fall through to the keep-the-slide warning below
     else:
         # First 1-9 digit anywhere in the label ("T1 核心" -> 1). A scan rather
         # than a regex so this module's import list stays untouched.

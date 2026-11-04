@@ -67,12 +67,14 @@ def test_convert_tabs_become_spaces():
     assert out == "a    b"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG: an embed with a text alias, ![[x.png|說明]], does not match IMG_RE; the wikilink "
-    "rule then turns it into '!說明' -- the image is silently dropped and not reported missing"))
 def test_convert_embed_with_text_alias_keeps_image(img_dir):
     out, k, _ = n.convert("![[胡_s01.png|說明文字]]", [str(img_dir)])
-    assert k == 1
+    assert k == 1 and "data:image/png" in out and "!說明" not in out
+
+
+def test_convert_embed_with_text_alias_missing_is_reported():
+    _, k, missing = n.convert("![[nope.png|說明]]", [])
+    assert k == 0 and missing == ["nope.png"]
 
 
 def test_doc_title():

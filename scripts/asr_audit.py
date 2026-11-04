@@ -247,6 +247,11 @@ def cn_to_num(s: str) -> str | None:
         else:
             return None
     total += section + (num or 0)
+    # Colloquial truncation: 一百二 = 120, 三萬五 = 35000 (last digit is one unit
+    # lower than the unit before it). A 零 in between (一百零二) keeps it literal.
+    if len(s) >= 2 and s[-1] in _CN_DIG and s[-2] in "百千萬":
+        lower = {"百": 10, "千": 100, "萬": 1000}[s[-2]]
+        total += _CN_DIG[s[-1]] * (lower - 1)
     return str(total)
 
 

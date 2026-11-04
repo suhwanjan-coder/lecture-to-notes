@@ -141,6 +141,13 @@ def require_identity(lec: Path):
             "chair's introduction / main title slide, then fill speaker, topic "
             "(short, filename-safe) and date (YYYYMMDD) in "
             f"{lec / 'lecture.json'}")
+    bad = [k for k in ("speaker", "topic", "date")
+           if any(ch in str(info[k]) for ch in '\\/:*?"<>|')]
+    if bad:
+        raise SystemExit(
+            f"STOP: lecture.json {bad} contain characters not allowed in file names "
+            f"(\\ / : * ? \" < > |); they end up in the slug and attachment folder. "
+            f"Edit {lec / 'lecture.json'}")
     info.setdefault("slug", f"{info['date']}_{info['speaker']}_{info['topic']}")
     info.setdefault("note_name", f"{info['date']}_{info['speaker']}_{info['topic']}.md")
     info.setdefault("prefix", f"{info['speaker']}_{info['topic']}")

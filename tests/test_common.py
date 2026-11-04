@@ -94,7 +94,7 @@ def test_parse_tier_none_uses_default():
     assert c.parse_tier(None, default=2) == 2
 
 
-@pytest.mark.parametrize("val", ["", "核心", "T", True, False, "T0", [], {}])
+@pytest.mark.parametrize("val", ["", "核心", "T", True, False, "T0", [], {}, float("nan"), float("inf"), float("-inf")])
 def test_parse_tier_unparseable_keeps_slide(val, capsys):
     assert c.parse_tier(val) == 1
     assert "WARNING" in capsys.readouterr().err

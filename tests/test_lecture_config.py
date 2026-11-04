@@ -204,11 +204,10 @@ def test_attach_rel_substitutes_slug(rl, monkeypatch):
     assert rl.attach_rel({"slug": "s1"}) == "99Attachment/lecture_s1"
 
 
-def test_require_identity_topic_with_slash_makes_nested_slug(rl, tmp_path, monkeypatch):
-    """Documents the lack of validation (see report): a '/' in topic is accepted and
-    flows into the attachment directory, creating a nested folder."""
-    (tmp_path / "lecture.json").write_text(json.dumps(
-        {"speaker": "A", "topic": "COVID/Flu", "date": "20261004"}), encoding="utf-8")
-    info = rl.require_identity(tmp_path)
-    monkeypatch.setattr(rl, "load_config", lambda: {})
-    assert Path(rl.attach_rel(info)).parts == ("99Attachment", "lecture_20261004_A_COVID", "Flu")
+@pytest.mark.parametrize("field,bad", [("topic", "COVID/Flu"), ("speaker", "A:B"), ("topic", 'q?"x')])
+def test_require_identity_rejects_filename_unsafe_chars(rl, tmp_path, field, bad):
+    data = {"speaker": "A", "topic": "T", "date": "20261004", field: bad}
+    (tmp_path / "lecture.json").write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(SystemExit) as e:
+        rl.require_identity(tmp_path)
+    assert field in str(e.value) and "not allowed" in str(e.value)
