@@ -150,3 +150,26 @@ def test_do_local_folder_skips_hidden_and_archive_dirs(tmp_path, monkeypatch):
     fm.do_local_folder(str(tmp_path))
     assert seen["media"] is None
     assert seen["counts"] == {"video": 1, "audio": 0, "pdf": 1, "pptx": 0}
+
+
+REPEAT_VTT = """WEBVTT
+
+00:00:01.000 --> 00:00:02.000
+Yes.
+
+00:00:02.000 --> 00:00:03.000
+Yes.
+
+00:00:03.000 --> 00:00:04.000
+No
+Yes.
+"""
+
+
+def test_parse_vtt_manual_keeps_genuinely_repeated_lines():
+    segs = fm.parse_vtt(REPEAT_VTT, rolling=False)
+    assert [s["text"] for s in segs] == ["Yes.", "Yes.", "No Yes."]
+
+
+def test_parse_vtt_auto_still_collapses_rolling_repeats():
+    assert [s["text"] for s in fm.parse_vtt(REPEAT_VTT)] == ["Yes.", "No"]

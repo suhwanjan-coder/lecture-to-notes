@@ -176,9 +176,11 @@ def _ts(s: str) -> float:
     return int(h or 0) * 3600 + int(mi) * 60 + int(se) + int(ms.ljust(3, "0")[:3]) / 1000
 
 
-def parse_vtt(text: str) -> list[dict]:
+def parse_vtt(text: str, rolling: bool = True) -> list[dict]:
     """VTT -> [{start,end,text}]. Handles YouTube auto-caption 'rolling' cues
-    (each cue repeats the previous cue's last line) by emitting only new lines."""
+    (each cue repeats the previous cue's last line) by emitting only new lines.
+    rolling=False (manual subtitles) keeps every cue: a speaker saying "Yes." twice
+    in a row is two utterances, not a scrolling repeat."""
     segs: list[dict] = []
     prev_lines: list[str] = []
     for block in re.split(r"\r?\n\r?\n", text.replace("﻿", "")):
@@ -198,14 +200,14 @@ def parse_vtt(text: str) -> list[dict]:
             l = re.sub(r"\s+", " ", l).strip()
             if l:
                 cur.append(l)
-        new = [l for l in cur if l not in prev_lines]
+        new = [l for l in cur if l not in prev_lines] if rolling else cur
         prev_lines = cur
         if not new:
             continue
         segs.append({"start": round(start, 3), "end": round(end, 3), "text": " ".join(new)})
     out: list[dict] = []
     for s in segs:
-        if out and out[-1]["text"] == s["text"]:
+        if rolling and out and out[-1]["text"] == s["text"]:
             out[-1]["end"] = max(out[-1]["end"], s["end"])
         else:
             out.append(s)
@@ -321,7 +323,7 @@ def do_url(url: str, out: str, max_height: int, subs_arg: str, section: str | No
         vtt = next((f for f in vtts if f == f"{name}.{lang}.vtt"), vtts[0] if vtts else None)
         if vtt:
             with open(os.path.join(src, vtt), "r", encoding="utf-8", errors="replace") as fh:
-                segs = parse_vtt(fh.read())
+                segs = parse_vtt(fh.read(), rolling=(kind == "auto"))
             if section:
                 segs = [dict(start=round(max(s["start"], sec_start) - sec_start, 3),
                              end=round(min(s["end"], sec_end) - sec_start, 3), text=s["text"])
